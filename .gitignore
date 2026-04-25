@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+out/
+build/
+coverage/
+*.tsbuildinfo
+
+# Local app data and browser profiles
+data/
+apps/desktop/data/
+**/data/sessions/
+**/data/snapshots/
+**/app-settings.json
+
+# Logs and temporary debug files
+*.log
+.tmp-*.log
+tmp-*.mjs
+tmp-*.js
+tmp-*.cjs
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Package manager caches
+.npm/
+.pnpm-store/

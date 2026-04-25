@@ -1,0 +1,19 @@
+{
+  "name": "@multi-ai/orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/orchestrator/src/index.js",
+  "exports": "./dist/orchestrator/src/index.js",
+  "types": "./dist/orchestrator/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo lint skipped",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@multi-ai/providers": "file:../providers",
+    "@multi-ai/shared": "file:../shared",
+    "@multi-ai/synthesizer": "file:../synthesizer"
+  }
+}

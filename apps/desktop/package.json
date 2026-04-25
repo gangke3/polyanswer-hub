@@ -1,0 +1,31 @@
+{
+  "name": "@multi-ai/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build --config electron/renderer/vite.config.ts && node scripts/fix-renderer-paths.mjs",
+    "dev": "concurrently -k \"vite --config electron/renderer/vite.config.ts\" \"wait-on tcp:3247 && set ELECTRON_RUN_AS_NODE=&& electron --import tsx electron/main/index.ts\"",
+    "lint": "echo lint skipped",
+    "start": "set ELECTRON_RUN_AS_NODE=&& electron dist/apps/desktop/electron/main/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@multi-ai/orchestrator": "file:../../packages/orchestrator",
+    "@multi-ai/providers": "file:../../packages/providers",
+    "@multi-ai/shared": "file:../../packages/shared",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.1.2",
+    "electron": "^35.1.4",
+    "tsx": "^4.19.3",
+    "vite": "^6.3.5",
+    "wait-on": "^8.0.3"
+  }
+}

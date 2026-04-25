@@ -1,0 +1,18 @@
+{
+  "name": "@multi-ai/providers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/providers/src/index.js",
+  "exports": "./dist/providers/src/index.js",
+  "types": "./dist/providers/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo lint skipped",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@multi-ai/browser-runner": "file:../browser-runner",
+    "@multi-ai/shared": "file:../shared"
+  }
+}

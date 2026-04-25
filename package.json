@@ -1,0 +1,21 @@
+{
+  "name": "polyanswer-hub",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.15.18",
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "build": "npm run build -ws --if-present",
+    "dev": "npm run dev -w @multi-ai/desktop",
+    "lint": "npm run lint -ws --if-present",
+    "start": "npm run start -w @multi-ai/desktop",
+    "typecheck": "npm run typecheck -ws --if-present"
+  }
+}
