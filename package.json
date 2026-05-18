@@ -3,6 +3,28 @@
   "version": "0.1.0",
   "description": "Local-first desktop app for asking one question across multiple AI providers and comparing the answers.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gangke3/polyanswer-hub.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gangke3/polyanswer-hub/issues"
+  },
+  "homepage": "https://github.com/gangke3/polyanswer-hub#readme",
+  "keywords": [
+    "ai",
+    "llm",
+    "desktop",
+    "electron",
+    "react",
+    "typescript",
+    "chatgpt",
+    "claude",
+    "gemini",
+    "grok",
+    "playwright",
+    "local-first"
+  ],
   "private": true,
   "packageManager": "npm@10.9.2",
   "workspaces": [
@@ -22,6 +44,7 @@
     "check": "npm run lint && npm run typecheck && npm run build",
     "dev": "npm run dev -w @multi-ai/desktop",
     "lint": "eslint .",
+    "package:win:portable": "powershell -ExecutionPolicy Bypass -File scripts/package-win-portable.ps1",
     "release:check": "npm run check && npm audit --registry=https://registry.npmjs.org",
     "start": "npm run start -w @multi-ai/desktop",
     "typecheck": "npm run typecheck -ws --if-present"

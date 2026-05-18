@@ -42,6 +42,22 @@ npm run release:check
 
 This runs lint, typecheck, build, and a full npm audit.
 
+To create a Windows portable release asset:
+
+```bash
+npm run package:win:portable
+```
+
+This writes a zip and SHA-256 checksum under `release/`. Review the generated files before attaching them to a GitHub Release.
+
+If Electron's binary download is slow or missing, install the runtime first and then rerun packaging:
+
+```powershell
+$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+node node_modules\electron\install.js
+npm run package:win:portable
+```
+
 ## 4. Review Product Claims
 
 Before publishing, confirm the README matches current behavior:
@@ -49,6 +65,7 @@ Before publishing, confirm the README matches current behavior:
 - supported provider list
 - Windows-only status
 - local API endpoints
+- README demo GIF and screenshots
 - manual-login limitation
 - MVP-stage caveats
 - no promise of CAPTCHA, login, usage-limit, or provider-term bypass
@@ -80,6 +97,7 @@ Initial MVP release of DuoAsk, a local-first Windows desktop app for asking one 
 
 Highlights:
 - Electron + React + TypeScript desktop app
+- Windows portable zip release asset
 - Browser-based provider adapters for ChatGPT, Claude, Gemini, Kimi, Doubao, and Grok
 - User-assisted login and local browser session reuse
 - Local HTTP API on 127.0.0.1:3719
@@ -89,13 +107,14 @@ Highlights:
 Known limitations:
 - Provider automation is experimental and can break when provider web UIs change
 - Windows is the current target platform
-- Installer packaging is still planned
+- Installer packaging is still planned; the first release uses a portable zip
 ```
 
 ## 6. After Publishing
 
 - Add screenshots to the GitHub repository social preview.
-- Pin a short demo GIF or screenshot in the README.
+- Use `docs/assets/duoask-social-preview.png` as the first social preview image.
+- Keep `docs/assets/duoask-demo.gif` pinned in the README.
 - Open a few starter issues for good first contributions.
 - Enable GitHub Security Advisories if available.
 - Watch CI on the first public push.

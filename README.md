@@ -1,25 +1,69 @@
 # 多问 DuoAsk
 
-Ask ChatGPT, Claude, Gemini, Kimi, Doubao, and Grok at once, compare their answers locally, and synthesize a final response.
+[![CI](https://github.com/gangke3/polyanswer-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/gangke3/polyanswer-hub/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue.svg)
+![Built with Electron](https://img.shields.io/badge/Electron-React%20%2B%20TypeScript-47848f.svg)
 
-多问 DuoAsk is a local-first Windows desktop app for people who use several AI assistants and want one clean workspace for comparison, synthesis, history, and export.
+Ask ChatGPT, Claude, Gemini, Kimi, Doubao, and Grok with one prompt, compare their answers side by side, and synthesize a final response locally.
+
+DuoAsk is a local-first Windows desktop app for people who use several AI assistants and want one clean workspace for comparison, synthesis, history, export, and scriptable local automation.
 
 ![DuoAsk desktop home screen](docs/assets/duoask-home-gpt-style-desktop.png)
 
-## Why It Exists
+![DuoAsk workflow demo](docs/assets/duoask-demo.gif)
 
-Different AI models often disagree, omit details, or shine at different parts of the same question. DuoAsk reduces tab switching and makes multi-model comparison practical:
+## Why DuoAsk
 
-- ask one question across multiple providers
-- keep raw provider answers side by side
-- synthesize a clearer final answer
-- save local task history for review
-- expose a local HTTP API for scripts and tools
-- keep provider sessions and history on your machine
+Different AI models often disagree, omit details, or shine at different parts of the same question. DuoAsk makes that comparison practical without juggling browser tabs.
 
-## Status
+- **One prompt, many providers**: send the same question to multiple AI assistants.
+- **Side-by-side answers**: keep raw provider answers visible for comparison.
+- **Synthesis workflow**: generate a clearer final answer from the collected results.
+- **Local-first sessions**: reuse browser login state stored on your own machine.
+- **Local history and export**: save, reopen, delete, and export previous tasks.
+- **Scriptable local API**: call DuoAsk from other tools through `127.0.0.1`.
 
-DuoAsk is an MVP-stage desktop app. The main app shell, provider orchestration, browser-session reuse, local API, history, export helpers, and real provider adapters are in place, but provider web UIs change frequently and should be treated as maintained integrations.
+## Quick Start
+
+Requirements:
+
+- Windows
+- Node.js 22 or newer
+- npm 10 or newer
+- Local Chrome or Edge installation for browser automation
+
+Install and run in development:
+
+```bash
+npm install
+npm run dev
+```
+
+Build and start the compiled app:
+
+```bash
+npm run build
+npm run start
+```
+
+Create a Windows portable release zip:
+
+```bash
+npm run package:win:portable
+```
+
+The portable package is written to `release/` and can be attached to a GitHub Release. Installer packaging is still planned.
+
+Windows helper script:
+
+```powershell
+.\启动多问.cmd
+```
+
+## Current Status
+
+DuoAsk is an MVP-stage desktop app. The main app shell, provider orchestration, browser-session reuse, local API, history, export helpers, and real provider adapters are in place.
 
 | Area | Status |
 | --- | --- |
@@ -28,9 +72,11 @@ DuoAsk is an MVP-stage desktop app. The main app shell, provider orchestration, 
 | Provider automation | Browser-based, user-assisted login |
 | Local history | JSON-backed task history today; SQLite schema exists |
 | Synthesis | Rule-based synthesis plus optional provider summary |
-| Packaging | Source build works; installer/release packaging still planned |
+| Packaging | Source build works; installer/release packaging is planned |
 
-## Providers
+Provider web UIs change frequently, so provider adapters should be treated as maintained integrations rather than permanent contracts.
+
+## Provider Support
 
 | Provider | Mode | Notes |
 | --- | --- | --- |
@@ -43,73 +89,13 @@ DuoAsk is an MVP-stage desktop app. The main app shell, provider orchestration, 
 
 DuoAsk does not bypass provider login, CAPTCHA, verification pages, usage limits, or provider terms. The intended flow is manual login in a visible browser, then local session reuse.
 
-## Features
-
-- **Multi-provider prompting**: submit the same prompt to selected AI providers.
-- **Visible login flow**: open provider pages and let the user log in manually.
-- **Session persistence**: reuse a local browser profile for later tasks.
-- **Parallel orchestration**: run providers concurrently and collect each result.
-- **Result comparison**: switch between synthesis and raw provider answers.
-- **Local history**: save, reopen, delete, and export previous tasks.
-- **Local API**: call DuoAsk from external scripts via HTTP.
-- **Email delivery**: optionally send task results through a user-configured SMTP server.
-
-## Screenshots
+## Preview
 
 ![DuoAsk main UI](docs/assets/duoask-main-ui-verify.png)
 
-## Tech Stack
-
-- Electron
-- React
-- TypeScript
-- Vite
-- npm workspaces
-- Playwright
-- SQLite schema design
-
-## Getting Started
-
-### Requirements
-
-- Windows
-- Node.js 22 or newer
-- npm 10 or newer
-- A local Chrome or Edge installation for browser automation
-
-### Install
-
-```bash
-npm install
-```
-
-### Run In Development
-
-```bash
-npm run dev
-```
-
-### Build
-
-```bash
-npm run build
-```
-
-### Start Built App
-
-```bash
-npm run start
-```
-
-You can also use the Windows helper script:
-
-```powershell
-.\启动多问.cmd
-```
-
 ## Local API
 
-After the desktop app starts, it opens a local HTTP API for other tools on the same machine.
+After the desktop app starts, it opens a local HTTP API for tools running on the same machine.
 
 - health check: `GET /api/health`
 - provider list: `GET /api/providers`
@@ -141,6 +127,14 @@ Optional environment variables:
 
 Legacy `POLYANSWER_API_*` variable names are still accepted for compatibility.
 
+## Privacy And Safety
+
+- Provider login happens in a visible browser flow controlled by the user.
+- Provider sessions are stored locally under ignored `data/` folders and must not be committed.
+- Local history, app settings, browser snapshots, logs, SMTP credentials, and API tokens are local user data.
+- The local API binds to `127.0.0.1` by default. Set `DUOASK_API_TOKEN` if another local tool needs authenticated access.
+- If a secret was ever committed or shared, rotate it before publishing or distributing the repository.
+
 ## Workspace Layout
 
 ```text
@@ -168,6 +162,7 @@ Useful checks:
 ```bash
 npm run check
 npm run release:check
+npm run package:win:portable
 ```
 
 Individual checks:
@@ -181,19 +176,27 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 
 `npm run lint` uses ESLint with a conservative flat config. The rule set is intentionally light for the MVP and can be tightened as the codebase stabilizes.
 
-## Security And Privacy
+## Contributing
 
-- Provider sessions are stored locally and must not be committed.
-- Browser snapshots, local data, logs, build output, and `.playwright-mcp/` captures are ignored by Git.
-- Do not commit cookies, local app settings, prompt history, captured provider pages, SMTP credentials, or API tokens.
-- If a secret was ever committed or shared, rotate it before publishing the repository.
+Contributions are welcome, especially provider-selector fixes, export improvements, smoke tests, packaging work, and documentation updates.
+
+Before opening a pull request:
+
+- run `npm run check`
+- avoid committing browser profiles, cookies, prompt history, snapshots, tokens, SMTP credentials, or `.env` files
+- note which provider account state you tested if changing provider automation
+- update README or docs when user-facing behavior changes
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), [SUPPORT.md](SUPPORT.md), and [SECURITY.md](SECURITY.md).
 
 ## Roadmap
 
 - Package the desktop app as a normal Windows installer.
+- Publish a Windows portable zip with the first GitHub release.
+- Keep the README demo GIF and GitHub social preview image up to date.
 - Replace JSON history persistence with the SQLite repository layer.
 - Add focused smoke tests for orchestration and provider adapters.
-- Add real ESLint/Prettier configuration.
+- Add stricter formatting and test automation.
 - Harden provider selectors and completion detection.
 - Improve synthesis beyond the rule-based baseline.
 - Split large renderer files into smaller view and component modules.
@@ -207,6 +210,9 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 - [Implementation status](docs/IMPLEMENTATION_STATUS.md)
 - [Delivery plan](docs/DELIVERY_PLAN.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Release preparation checklist](docs/PREPARE_RELEASE.md)
+- [Public launch plan](docs/PUBLIC_LAUNCH_PLAN.md)
+- [Changelog](CHANGELOG.md)
 
 ## License
 

@@ -8,6 +8,7 @@ dist/
 out/
 build/
 coverage/
+release/
 *.tsbuildinfo
 
 # Local app data and browser profiles
@@ -20,6 +21,7 @@ apps/desktop/data/
 # Logs and temporary debug files
 *.log
 .tmp-*.log
+tmp/
 tmp-*.mjs
 tmp-*.js
 tmp-*.cjs

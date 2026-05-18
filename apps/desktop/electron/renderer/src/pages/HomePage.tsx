@@ -933,7 +933,7 @@ export function HomePage() {
                   </p>
                 ) : null}
                 <p className="settings-note">
-                  默认复用 `D:\\FOND` 中的 SMTP 配置，也可以单独修改收件邮箱并持久保存。
+                  默认读取环境变量中的 SMTP 配置，也可以单独修改收件邮箱并持久保存。
                 </p>
               </article>
 
