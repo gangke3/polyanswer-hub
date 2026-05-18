@@ -23,6 +23,10 @@ apps/desktop/data/
 tmp-*.mjs
 tmp-*.js
 tmp-*.cjs
+/test.ts
+/test_*.mjs
+/test_*.js
+.playwright-mcp/
 
 # Environment files
 .env

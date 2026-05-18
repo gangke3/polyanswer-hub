@@ -1,6 +1,8 @@
 {
-  "name": "polyanswer-hub",
+  "name": "duoask-workspace",
   "version": "0.1.0",
+  "description": "Local-first desktop app for asking one question across multiple AI providers and comparing the answers.",
+  "license": "MIT",
   "private": true,
   "packageManager": "npm@10.9.2",
   "workspaces": [
@@ -8,13 +10,19 @@
     "packages/*"
   ],
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.15.18",
-    "typescript": "^5.8.3"
+    "eslint": "^10.4.0",
+    "globals": "^17.6.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.59.3"
   },
   "scripts": {
     "build": "npm run build -ws --if-present",
+    "check": "npm run lint && npm run typecheck && npm run build",
     "dev": "npm run dev -w @multi-ai/desktop",
-    "lint": "npm run lint -ws --if-present",
+    "lint": "eslint .",
+    "release:check": "npm run check && npm audit --registry=https://registry.npmjs.org",
     "start": "npm run start -w @multi-ai/desktop",
     "typecheck": "npm run typecheck -ws --if-present"
   }

@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible DuoAsk issue.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps needed to reproduce the issue.
+      placeholder: |
+        1. Open DuoAsk
+        2. Select providers
+        3. Run prompt...
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      description: Which provider is affected, if any?
+      placeholder: ChatGPT, Claude, Gemini, Kimi, Doubao, Grok
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Add logs or screenshots only after removing secrets, cookies, prompt history, and account data.

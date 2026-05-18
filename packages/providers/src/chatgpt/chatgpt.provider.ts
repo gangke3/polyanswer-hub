@@ -135,32 +135,38 @@ export class ChatGPTProvider extends AbstractProviderAdapter {
     const deadline = Date.now() + ctx.timeoutMs;
     let stableIterations = 0;
     let previousText = "";
+    let loopCount = 0;
 
     while (Date.now() < deadline) {
-      const bodyText = await session.page.locator("body").innerText().catch(() => "");
-      if (bodyText.includes("登录以获取基于已保存聊天的回答") || bodyText.includes("免费注册")) {
-        throw new Error("ChatGPT requires login before it can return an answer");
+      loopCount += 1;
+
+      // login 检查改为低频
+      if (loopCount % 6 === 1) {
+        const bodyText = await session.page.locator("body").innerText().catch(() => "");
+        if (bodyText.includes("登录以获取基于已保存聊天的回答") || bodyText.includes("免费注册")) {
+          throw new Error("ChatGPT requires login before it can return an answer");
+        }
       }
 
       const answers = session.page.locator(chatgptSelectors.answerContainerCandidates.join(", "));
-      const count = await answers.count();
+      const count = await answers.count().catch(() => 0);
       if (count === 0) {
-        await sleep(1000);
+        await sleep(300);
         continue;
       }
 
       const latest = answers.nth(count - 1);
-      const latestText = normalizeAnswerText(await latest.innerText());
+      const latestText = normalizeAnswerText(await latest.innerText().catch(() => ""));
       if (!latestText) {
-        await sleep(1000);
+        await sleep(300);
         continue;
       }
 
-      const isTypingIndicatorVisible = await session.page
-        .locator("[data-testid='typing-animation'], .result-thinking, .animate-pulse")
-        .first()
-        .isVisible()
-        .catch(() => false);
+      // 并发获取 DOM 状态，减少 IPC
+      const [isTypingIndicatorVisible, isStreaming] = await Promise.all([
+        session.page.locator("[data-testid='typing-animation'], .result-thinking, .animate-pulse").first().isVisible().catch(() => false),
+        session.page.locator("button[aria-label*='Stop'], button:has-text('Stop')").first().isVisible().catch(() => false)
+      ]);
 
       if (latestText === previousText) {
         stableIterations += 1;
@@ -169,14 +175,11 @@ export class ChatGPTProvider extends AbstractProviderAdapter {
         stableIterations = 0;
       }
 
-      const stopButton = session.page.locator("button[aria-label*='Stop'], button:has-text('Stop')").first();
-      const isStreaming = await stopButton.isVisible().catch(() => false);
-
-      if (!isStreaming && !isTypingIndicatorVisible && stableIterations >= 2) {
+      if (!isStreaming && !isTypingIndicatorVisible && stableIterations >= 1) {
         return;
       }
 
-      await sleep(1200);
+      await sleep(300);
     }
 
     throw new Error("Timed out while waiting for ChatGPT answer completion");

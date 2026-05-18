@@ -1,4 +1,4 @@
-export const PROVIDER_IDS = ["chatgpt", "gemini", "kimi", "doubao"] as const;
+export const PROVIDER_IDS = ["chatgpt", "claude", "gemini", "kimi", "doubao", "grok"] as const;
 
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 

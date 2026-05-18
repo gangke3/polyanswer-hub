@@ -15,9 +15,11 @@ Each provider adapter must implement:
 ## Provider Order
 
 1. ChatGPT
-2. Gemini
-3. Kimi
-4. Doubao
+2. Claude
+3. Gemini
+4. Kimi
+5. Doubao
+6. Grok
 
 ## Shared Rules
 
@@ -29,7 +31,8 @@ Each provider adapter must implement:
 ## Known Implementation Challenges
 
 - ChatGPT: composer variants and rate-limit states
+- Claude: account state, conversation resets, and response container variants
 - Gemini: Google account state and dynamic response regions
 - Kimi: dynamic editor structure
 - Doubao: localized UI variations and fast DOM updates
-
+- Grok: login routing and response selector variance

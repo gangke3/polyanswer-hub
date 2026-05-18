@@ -1,0 +1,34 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="duoask-bg" x1="36" y1="28" x2="216" y2="224" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#103645" />
+      <stop offset="0.55" stop-color="#0F766E" />
+      <stop offset="1" stop-color="#14B8A6" />
+    </linearGradient>
+    <linearGradient id="duoask-chat" x1="142" y1="58" x2="192" y2="126" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBBF24" />
+      <stop offset="1" stop-color="#F59E0B" />
+    </linearGradient>
+  </defs>
+  <rect x="20" y="20" width="216" height="216" rx="60" fill="url(#duoask-bg)" />
+  <circle cx="200" cy="54" r="14" fill="#FBBF24" fill-opacity="0.32" />
+  <path
+    d="M132 60H170C189.882 60 206 76.1178 206 96V106C206 125.882 189.882 142 170 142H158L140 160L144 142H132C112.118 142 96 125.882 96 106V96C96 76.1178 112.118 60 132 60Z"
+    fill="url(#duoask-chat)"
+    fill-opacity="0.35"
+  />
+  <path
+    d="M74 68H146C175.823 68 200 92.1766 200 122V128C200 157.823 175.823 182 146 182H110L80 206L88 182C63.6995 175.767 46 153.723 46 128V122C46 92.1766 70.1766 68 100 68H74Z"
+    fill="white"
+  />
+  <path
+    d="M124.671 84C146.42 84 161.5 96.7239 161.5 114.688C161.5 125.406 156.219 133.148 145.854 139.104C137.701 143.809 134.5 147.219 134.5 154.438V157"
+    stroke="#0F766E"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="129" cy="177" r="10" fill="#F59E0B" />
+  <circle cx="74" cy="180" r="7" fill="#14B8A6" fill-opacity="0.6" />
+  <circle cx="182" cy="178" r="7" fill="#103645" fill-opacity="0.16" />
+</svg>

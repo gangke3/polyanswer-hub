@@ -32,8 +32,21 @@ export abstract class AbstractProviderAdapter implements ProviderAdapter {
     }
 
     const session = this.getSession(ctx);
-    await session.page.goto(this.homepage, { waitUntil: "domcontentloaded" });
-    await waitForNetworkSettled(session.page);
+    const currentUrl = session.page.url();
+    const homepageHost = new URL(this.homepage).host;
+
+    // 若当前页面已在该 provider 主域，避免重复导航（节省 2-4 秒）
+    let alreadyOnSite = false;
+    try {
+      alreadyOnSite = new URL(currentUrl).host === homepageHost;
+    } catch {
+      // ignore
+    }
+
+    if (!alreadyOnSite) {
+      await session.page.goto(this.homepage, { waitUntil: "domcontentloaded" });
+      await waitForNetworkSettled(session.page);
+    }
 
     const challengeMarker = selectors.challengeMarkers?.length
       ? await firstAttachedLocator(session.page, selectors.challengeMarkers, 1200)
@@ -66,6 +79,16 @@ export abstract class AbstractProviderAdapter implements ProviderAdapter {
 
   async openHome(ctx: ProviderContext): Promise<void> {
     const session = this.getSession(ctx);
+    // 如果已在目标域名，跳过重复导航（checkLogin 已导航过，节省 2-4 秒）
+    const currentUrl = session.page.url();
+    const homepageHost = new URL(this.homepage).host;
+    try {
+      if (new URL(currentUrl).host === homepageHost && !session.page.isClosed()) {
+        return;
+      }
+    } catch {
+      // ignore invalid URL
+    }
     await session.page.goto(this.homepage, { waitUntil: "domcontentloaded" });
     await waitForNetworkSettled(session.page);
   }
@@ -159,14 +182,14 @@ export abstract class AbstractProviderAdapter implements ProviderAdapter {
       const answers = session.page.locator(selectors.answerContainerCandidates.join(", "));
       const count = await answers.count();
       if (count === 0) {
-        await sleep(1000);
+        await sleep(300);
         continue;
       }
 
       const latest = answers.nth(count - 1);
       const latestText = normalizeAnswerText(await latest.innerText().catch(() => ""));
       if (!latestText) {
-        await sleep(1000);
+        await sleep(300);
         continue;
       }
 
@@ -177,11 +200,12 @@ export abstract class AbstractProviderAdapter implements ProviderAdapter {
         stableIterations = 0;
       }
 
-      if (stableIterations >= 2) {
+      // 1 次稳定即可，不再额外等 800ms
+      if (stableIterations >= 1) {
         return;
       }
 
-      await sleep(1200);
+      await sleep(400);
     }
 
     throw new Error(`Timed out while waiting for ${this.name} answer completion`);

@@ -2,11 +2,11 @@
 
 ## Product Name
 
-PolyAnswer Hub
+多问 DuoAsk
 
 ## Product Goal
 
-Let a user ask one question and collect answers from ChatGPT, Gemini, Kimi, and Doubao in one place, then produce a synthesized final answer.
+Let a user ask one question and collect answers from ChatGPT, Claude, Gemini, Kimi, Doubao, and Grok in one place, then produce a synthesized final answer.
 
 ## Product Positioning
 
@@ -25,9 +25,11 @@ Let a user ask one question and collect answers from ChatGPT, Gemini, Kimi, and 
 ## MVP Providers
 
 - ChatGPT
+- Claude
 - Gemini
 - Kimi
 - Doubao
+- Grok
 
 ## Core User Flow
 
@@ -94,7 +96,7 @@ Let a user ask one question and collect answers from ChatGPT, Gemini, Kimi, and 
 
 ## Success Criteria
 
-- 4 providers supported
+- 6 providers supported
 - Manual login works
 - Parallel asking works
 - Answers are visible in one UI

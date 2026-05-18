@@ -1,48 +1,62 @@
-# PolyAnswer Hub
+# 多问 DuoAsk
 
-PolyAnswer Hub is a local-first Windows desktop app for asking one question across multiple AI providers, comparing their answers side by side, and generating a synthesized final answer.
+Ask ChatGPT, Claude, Gemini, Kimi, Doubao, and Grok at once, compare their answers locally, and synthesize a final response.
 
-The project is built as an Electron + React + TypeScript monorepo. It currently targets ChatGPT, Gemini, Kimi, and Doubao through provider adapters and browser automation, while keeping user sessions and task history on the local machine.
+多问 DuoAsk is a local-first Windows desktop app for people who use several AI assistants and want one clean workspace for comparison, synthesis, history, and export.
 
-## Why This Exists
+![DuoAsk desktop home screen](docs/assets/duoask-home-gpt-style-desktop.png)
 
-Large language models often disagree, omit details, or shine in different parts of the same problem. PolyAnswer Hub is designed to reduce tab switching and make multi-model comparison practical:
+## Why It Exists
 
-- ask once and run the prompt against several providers
-- keep provider answers in one local task view
-- compare agreement, disagreement, and missing details
-- synthesize a cleaner final answer from the collected responses
-- preserve local history for later review and export
+Different AI models often disagree, omit details, or shine at different parts of the same question. DuoAsk reduces tab switching and makes multi-model comparison practical:
 
-## Current Status
+- ask one question across multiple providers
+- keep raw provider answers side by side
+- synthesize a clearer final answer
+- save local task history for review
+- expose a local HTTP API for scripts and tools
+- keep provider sessions and history on your machine
 
-This repository contains the first working scaffold and early implementation:
+## Status
 
-- Electron desktop shell
-- React renderer shell
-- TypeScript workspace packages
-- provider metadata and adapter interfaces
-- browser session manager backed by Playwright
-- first real ChatGPT browser automation path
-- provider skeletons for Gemini, Kimi, and Doubao
-- task orchestration skeleton
-- local database schema draft
-- Markdown / TXT / PDF export helpers
-- rule-based synthesis placeholder
-- product, architecture, setup, and delivery docs
+DuoAsk is an MVP-stage desktop app. The main app shell, provider orchestration, browser-session reuse, local API, history, export helpers, and real provider adapters are in place, but provider web UIs change frequently and should be treated as maintained integrations.
 
-PolyAnswer Hub is not production-ready yet. The project is in MVP development, with the next major work focused on persistence, provider hardening, and full UI flows.
+| Area | Status |
+| --- | --- |
+| Desktop app | Working Electron + React app |
+| Local API | Working on `127.0.0.1:3719` |
+| Provider automation | Browser-based, user-assisted login |
+| Local history | JSON-backed task history today; SQLite schema exists |
+| Synthesis | Rule-based synthesis plus optional provider summary |
+| Packaging | Source build works; installer/release packaging still planned |
+
+## Providers
+
+| Provider | Mode | Notes |
+| --- | --- | --- |
+| ChatGPT | Browser automation | Real adapter implemented; login may require manual verification |
+| Claude | Browser automation | Experimental adapter |
+| Gemini | Browser automation | Experimental adapter; Google account state can vary |
+| Kimi | Browser automation | Experimental adapter |
+| Doubao | Browser automation | Experimental adapter; may require manual verification |
+| Grok | Browser automation | Experimental adapter |
+
+DuoAsk does not bypass provider login, CAPTCHA, verification pages, usage limits, or provider terms. The intended flow is manual login in a visible browser, then local session reuse.
 
 ## Features
 
 - **Multi-provider prompting**: submit the same prompt to selected AI providers.
-- **User-assisted login**: use visible browser windows for manual login when needed.
-- **Session persistence**: store provider browser profiles locally per provider.
-- **Parallel execution model**: orchestrator is structured for concurrent provider runs.
-- **Answer extraction**: provider adapters encapsulate provider-specific DOM logic.
-- **Synthesis layer**: combines provider responses into a final answer.
-- **Local history model**: database schema covers tasks, answers, sessions, synthesis, and events.
-- **Export support**: Markdown, TXT, and PDF exporter modules are included.
+- **Visible login flow**: open provider pages and let the user log in manually.
+- **Session persistence**: reuse a local browser profile for later tasks.
+- **Parallel orchestration**: run providers concurrently and collect each result.
+- **Result comparison**: switch between synthesis and raw provider answers.
+- **Local history**: save, reopen, delete, and export previous tasks.
+- **Local API**: call DuoAsk from external scripts via HTTP.
+- **Email delivery**: optionally send task results through a user-configured SMTP server.
+
+## Screenshots
+
+![DuoAsk main UI](docs/assets/duoask-main-ui-verify.png)
 
 ## Tech Stack
 
@@ -52,48 +66,21 @@ PolyAnswer Hub is not production-ready yet. The project is in MVP development, w
 - Vite
 - npm workspaces
 - Playwright
-- SQLite / Drizzle schema design
-
-## Workspace Layout
-
-```text
-.
-├── apps/
-│   └── desktop/          # Electron main process, preload, and React renderer
-├── packages/
-│   ├── browser-runner/   # Playwright browser/session helpers
-│   ├── db/               # database schema and repositories
-│   ├── export/           # Markdown, TXT, and PDF exporters
-│   ├── logger/           # local logging helpers
-│   ├── orchestrator/     # task coordination and provider workers
-│   ├── providers/        # provider adapters for ChatGPT, Gemini, Kimi, Doubao
-│   ├── shared/           # shared types, constants, and utilities
-│   └── synthesizer/      # answer synthesis logic
-├── docs/                 # product, architecture, setup, and delivery notes
-├── package.json          # root workspace scripts
-└── tsconfig.base.json    # shared TypeScript config
-```
+- SQLite schema design
 
 ## Getting Started
 
 ### Requirements
 
 - Windows
-- Node.js 22 or newer recommended
+- Node.js 22 or newer
 - npm 10 or newer
+- A local Chrome or Edge installation for browser automation
 
-### Install Dependencies
+### Install
 
 ```bash
 npm install
-```
-
-### Install Playwright Browser
-
-Real browser automation needs Chromium:
-
-```bash
-npx playwright install chromium
 ```
 
 ### Run In Development
@@ -114,34 +101,102 @@ npm run build
 npm run start
 ```
 
-### Type Check
+You can also use the Windows helper script:
+
+```powershell
+.\启动多问.cmd
+```
+
+## Local API
+
+After the desktop app starts, it opens a local HTTP API for other tools on the same machine.
+
+- health check: `GET /api/health`
+- provider list: `GET /api/providers`
+- ask question: `POST /api/ask`
+- open login pages: `POST /api/login/open`
+
+Example request on Windows:
+
+```bash
+curl -X POST http://127.0.0.1:3719/api/ask ^
+  -H "Content-Type: application/json" ^
+  -d "{\"question\":\"Summarize what this code does\"}"
+```
+
+By default:
+
+- if `providerIds` is omitted or empty, all supported providers are used
+- `autoSynthesize` is enabled
+- `autoSave` is enabled
+- `autoSummarize` is optional and can use a selected provider to summarize all answers
+
+Optional environment variables:
+
+- `DUOASK_API_HOST` changes the bind address
+- `DUOASK_API_PORT` changes the port
+- `DUOASK_API_TOKEN` requires `Authorization: Bearer <token>`
+- `DUOASK_SMTP_USER` sets the default SMTP user
+- `DUOASK_SMTP_PASS` sets the default SMTP password
+
+Legacy `POLYANSWER_API_*` variable names are still accepted for compatibility.
+
+## Workspace Layout
+
+```text
+.
+├── apps/
+│   └── desktop/          # Electron main process, preload, and React renderer
+├── packages/
+│   ├── browser-runner/   # Playwright browser/session helpers
+│   ├── db/               # database schema and repositories
+│   ├── export/           # Markdown, TXT, and PDF exporters
+│   ├── logger/           # local logging helpers
+│   ├── orchestrator/     # task coordination and provider workers
+│   ├── providers/        # provider adapters
+│   ├── shared/           # shared types, constants, and utilities
+│   └── synthesizer/      # answer synthesis logic
+├── docs/                 # product, architecture, and setup notes
+├── package.json          # root workspace scripts
+└── tsconfig.base.json    # shared TypeScript config
+```
+
+## Development
+
+Useful checks:
+
+```bash
+npm run check
+npm run release:check
+```
+
+Individual checks:
 
 ```bash
 npm run typecheck
+npm run lint
+npm run build
+npm audit --omit=dev --registry=https://registry.npmjs.org
 ```
 
-## Provider Notes
+`npm run lint` uses ESLint with a conservative flat config. The rule set is intentionally light for the MVP and can be tightened as the codebase stabilizes.
 
-PolyAnswer Hub does not bypass provider login, CAPTCHA, or account checks. The intended flow is:
+## Security And Privacy
 
-1. open a visible browser session for each provider
-2. let the user log in manually
-3. persist the local browser profile
-4. reuse that session for later tasks
-5. ask the provider through its normal web interface
-6. extract the finished response for comparison and synthesis
+- Provider sessions are stored locally and must not be committed.
+- Browser snapshots, local data, logs, build output, and `.playwright-mcp/` captures are ignored by Git.
+- Do not commit cookies, local app settings, prompt history, captured provider pages, SMTP credentials, or API tokens.
+- If a secret was ever committed or shared, rotate it before publishing the repository.
 
-Provider web UIs can change at any time, so selectors and completion detection logic should be treated as maintained integration code.
+## Roadmap
 
-## Development Roadmap
-
-- persist task results through the SQLite repository layer
-- complete full React task, result, history, and login-center views
-- harden ChatGPT automation with more real-world login and response cases
-- implement real Gemini, Kimi, and Doubao adapters
-- improve synthesis beyond the current rule-based placeholder
-- add focused integration tests for provider adapters and orchestration
-- package the desktop app for normal Windows installation
+- Package the desktop app as a normal Windows installer.
+- Replace JSON history persistence with the SQLite repository layer.
+- Add focused smoke tests for orchestration and provider adapters.
+- Add real ESLint/Prettier configuration.
+- Harden provider selectors and completion detection.
+- Improve synthesis beyond the rule-based baseline.
+- Split large renderer files into smaller view and component modules.
 
 ## Documentation
 
@@ -153,12 +208,6 @@ Provider web UIs can change at any time, so selectors and completion detection l
 - [Delivery plan](docs/DELIVERY_PLAN.md)
 - [Roadmap](docs/ROADMAP.md)
 
-## Security And Privacy
-
-- Provider sessions are stored locally and should not be committed to Git.
-- Browser snapshots, local data, logs, and generated build output are ignored by Git.
-- Do not commit account cookies, local app settings, prompt history, or captured provider pages.
-
 ## License
 
-No license has been selected yet.
+MIT. See [LICENSE](LICENSE).

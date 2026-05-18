@@ -9,6 +9,7 @@
 - SQLite driver
 - Drizzle ORM
 - Zustand
+- Nodemailer
 
 ## Package Manager
 
@@ -16,16 +17,18 @@ Use `npm` for now because it is already available in the current environment. Th
 
 ## Local Run Goal
 
-The first runnable milestone is:
+The runnable desktop flow is:
 
-1. start Electron shell
-2. load provider metadata
-3. submit a fake in-memory task
-4. show placeholder answers
+1. start the Electron shell
+2. load provider metadata and app settings
+3. open visible provider login tabs
+4. submit a prompt to selected providers
+5. show provider answers and a synthesized result
+6. save task history locally when enabled
 
 ## Real Automation Goal
 
-After dependencies are installed and provider selectors are implemented:
+The current browser automation goal is:
 
 1. open real browser context
 2. complete manual login
@@ -33,27 +36,21 @@ After dependencies are installed and provider selectors are implemented:
 4. submit prompt to each provider
 5. extract text and persist results
 
-## Playwright Browser Install
-
-The project now depends on Playwright. Before testing real browser automation, run:
-
-```bash
-npx playwright install chromium
-```
-
 ## Current Real Provider Coverage
 
-- ChatGPT: first real browser automation path is implemented
-- Gemini: skeleton only
-- Kimi: skeleton only
-- Doubao: skeleton only
+- ChatGPT: browser automation adapter
+- Claude: experimental browser automation adapter
+- Gemini: experimental browser automation adapter
+- Kimi: experimental browser automation adapter
+- Doubao: experimental browser automation adapter
+- Grok: experimental browser automation adapter
 
-## ChatGPT Flow Today
+## Browser Flow Today
 
-1. Launch a persistent Chromium profile from `data/sessions/chatgpt`
-2. Open `https://chatgpt.com/`
-3. If not logged in, wait for manual login in the visible browser
-4. Find the composer
+1. Launch or attach to a shared native Chrome / Edge profile under `data/sessions/shared-browser-native`
+2. Open each provider's login or home page in a visible tab
+3. If not logged in, wait for manual login or verification in the visible browser
+4. Find the provider composer
 5. Submit the prompt
 6. Poll the latest assistant response until it stabilizes
-7. Save page HTML and screenshot into `data/snapshots/chatgpt`
+7. Save page HTML and screenshots into `data/snapshots/<provider>`

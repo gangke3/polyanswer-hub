@@ -1,0 +1,71 @@
+<svg width="720" height="240" viewBox="0 0 720 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="duoask-lockup-bg" x1="36" y1="28" x2="216" y2="224" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#103645" />
+      <stop offset="0.55" stop-color="#0F766E" />
+      <stop offset="1" stop-color="#14B8A6" />
+    </linearGradient>
+    <linearGradient id="duoask-lockup-chat" x1="142" y1="58" x2="192" y2="126" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBBF24" />
+      <stop offset="1" stop-color="#F59E0B" />
+    </linearGradient>
+  </defs>
+  <rect width="720" height="240" rx="32" fill="#F4FBF9" />
+  <g transform="translate(28 24)">
+    <rect x="20" y="20" width="152" height="152" rx="42" fill="url(#duoask-lockup-bg)" />
+    <circle cx="160" cy="44" r="10" fill="#FBBF24" fill-opacity="0.32" />
+    <path
+      d="M108 50H136C150.359 50 162 61.6406 162 76V84C162 98.3594 150.359 110 136 110H127L114 123L117 110H108C93.6406 110 82 98.3594 82 84V76C82 61.6406 93.6406 50 108 50Z"
+      fill="url(#duoask-lockup-chat)"
+      fill-opacity="0.35"
+    />
+    <path
+      d="M66 56H118C139.539 56 157 73.4609 157 95V100C157 121.539 139.539 139 118 139H92L70 156L76 139C58.4486 134.496 46 118.567 46 100V95C46 73.4609 63.4609 56 85 56H66Z"
+      fill="white"
+    />
+    <path
+      d="M102.855 68C118.567 68 129.465 77.1922 129.465 90.1744C129.465 97.9199 125.649 103.514 118.16 107.818C112.272 111.217 109.959 113.682 109.959 118.899V120.744"
+      stroke="#0F766E"
+      stroke-width="10"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <circle cx="106" cy="135" r="7" fill="#F59E0B" />
+    <circle cx="66" cy="137" r="5" fill="#14B8A6" fill-opacity="0.6" />
+    <circle cx="147" cy="136" r="5" fill="#103645" fill-opacity="0.16" />
+  </g>
+  <g transform="translate(252 62)">
+    <text
+      x="0"
+      y="56"
+      fill="#103645"
+      font-family="'Microsoft YaHei', 'Segoe UI', sans-serif"
+      font-size="72"
+      font-weight="700"
+      letter-spacing="0"
+    >
+      多问
+    </text>
+    <text
+      x="4"
+      y="108"
+      fill="#0F766E"
+      font-family="'Segoe UI', 'Microsoft YaHei', sans-serif"
+      font-size="34"
+      font-weight="700"
+      letter-spacing="0.08em"
+    >
+      DuoAsk
+    </text>
+    <text
+      x="4"
+      y="152"
+      fill="#5D7380"
+      font-family="'Microsoft YaHei', 'Segoe UI', sans-serif"
+      font-size="24"
+      font-weight="500"
+    >
+      一问多答，多源聚合比较
+    </text>
+  </g>
+</svg>

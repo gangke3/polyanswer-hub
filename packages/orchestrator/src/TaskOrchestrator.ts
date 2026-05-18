@@ -1,6 +1,5 @@
 import type {
   CreateTaskInput,
-  ProviderExecutionMode,
   ProviderRunResult,
   ProviderId,
   TaskEvent,
@@ -10,7 +9,6 @@ import { createId, nowIso } from "@multi-ai/shared";
 import { getProvider } from "@multi-ai/providers";
 import { RuleBasedSynthesizer } from "@multi-ai/synthesizer";
 import { ProviderWorker } from "./ProviderWorker.js";
-import { ApiProviderWorker } from "./ApiProviderWorker.js";
 import { createTaskEvent } from "./events.js";
 
 export interface TaskExecutionResult {
@@ -46,40 +44,53 @@ export class TaskOrchestrator {
 
     const answers: ProviderRunResult[] = [];
 
-    for (const providerId of input.providerIds) {
+    // 并行执行所有 providers，大幅减少总耗时
+    const parallelStart = Date.now();
+    console.log(`[Orchestrator] 🚀 开始并行执行 ${input.providerIds.length} 个 providers: ${input.providerIds.join(", ")}`);
+
+    const providerTasks = input.providerIds.map(async (providerId) => {
       const provider = getProvider(providerId);
-      const mode: ProviderExecutionMode =
-        input.providerModes?.[providerId] ?? input.providerSettings?.[providerId]?.mode ?? "browser";
-      const worker = mode === "api" ? new ApiProviderWorker(provider) : new ProviderWorker(provider);
+      const worker = new ProviderWorker(provider);
+      const providerStart = Date.now();
 
       events.push(
-        createTaskEvent(taskId, "provider.started", `${provider.name} started in ${mode} mode`, providerId)
+        createTaskEvent(taskId, "provider.started", `${provider.name} started in browser mode`, providerId)
       );
+
+      console.log(`[Orchestrator] ▶ ${provider.name} 开始执行`);
 
       const result = await worker.run(
         {
           taskId,
           providerId,
           profilePath: `data/sessions/${providerId}`,
-          timeoutMs: this.resolveProviderTimeout(providerId, input.timeoutMs, mode),
-          visible: mode !== "api",
-          mode,
+          timeoutMs: this.resolveProviderTimeout(providerId, input.timeoutMs),
+          visible: true,
           settings: input.providerSettings?.[providerId]
         },
         input.question
       );
 
+      const providerElapsed = ((Date.now() - providerStart) / 1000).toFixed(1);
+      console.log(`[Orchestrator] ✔ ${provider.name} 完成，状态: ${result.status}，耗时: ${providerElapsed}s`);
+
       events.push(
         createTaskEvent(
           taskId,
           "provider.completed",
-          `${provider.name} finished with ${result.status}`,
+          `${provider.name} finished with ${result.status} in ${providerElapsed}s`,
           providerId
         )
       );
 
-      answers.push(result);
-    }
+      return result;
+    });
+
+    const results = await Promise.all(providerTasks);
+    answers.push(...results);
+
+    const parallelElapsed = ((Date.now() - parallelStart) / 1000).toFixed(1);
+    console.log(`[Orchestrator] ✅ 所有 providers 并行执行完毕，总耗时: ${parallelElapsed}s（串行需约 ${results.reduce((s, r) => s + (r.elapsedMs ?? 0), 0) / 1000}s）`);
 
     const synthesis = input.autoSynthesize ? this.synthesizer.synthesize(taskId, answers) : undefined;
     const autoSummary = input.autoSummarize
@@ -141,10 +152,8 @@ export class TaskOrchestrator {
         taskId,
         providerId: summaryProviderId,
         profilePath: `data/sessions/${summaryProviderId}`,
-        timeoutMs: this.resolveProviderTimeout(summaryProviderId, input.timeoutMs, "browser"),
+        timeoutMs: this.resolveProviderTimeout(summaryProviderId, input.timeoutMs),
         visible: true,
-        mode: "browser",
-        forceNewPage: true,
         settings: input.providerSettings?.[summaryProviderId]
       },
       prompt
@@ -186,17 +195,13 @@ export class TaskOrchestrator {
     ].join("\n");
   }
 
-  private resolveProviderTimeout(
-    providerId: ProviderId,
-    timeoutMs: number,
-    mode: ProviderExecutionMode
-  ): number {
-    if (mode === "api") {
-      return timeoutMs;
-    }
-
+  private resolveProviderTimeout(providerId: ProviderId, timeoutMs: number): number {
     switch (providerId) {
+      case "claude":
+        return Math.max(timeoutMs, 180000);
       case "doubao":
+        return Math.max(timeoutMs, 240000);
+      case "kimi":
         return Math.max(timeoutMs, 240000);
       case "gemini":
         return Math.max(timeoutMs, 150000);

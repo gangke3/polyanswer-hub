@@ -1,5 +1,5 @@
 import type { ProviderId } from "./provider.js";
-import type { ProviderExecutionMode, ProviderSettings } from "./settings.js";
+import type { ProviderSettings } from "./settings.js";
 
 export type TaskStatus =
   | "draft"
@@ -31,7 +31,6 @@ export interface CreateTaskInput {
   autoSummarize?: boolean;
   summaryProviderId?: ProviderId;
   timeoutMs: number;
-  providerModes?: Partial<Record<ProviderId, ProviderExecutionMode>>;
   providerSettings?: Partial<Record<ProviderId, ProviderSettings>>;
 }
 

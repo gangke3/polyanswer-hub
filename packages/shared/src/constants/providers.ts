@@ -9,6 +9,13 @@ export const PROVIDERS: ProviderMeta[] = [
     enabled: true
   },
   {
+    id: "claude",
+    name: "Claude",
+    homepage: "https://claude.ai/new",
+    loginUrl: "https://claude.ai/new",
+    enabled: true
+  },
+  {
     id: "gemini",
     name: "Gemini",
     homepage: "https://gemini.google.com/",
@@ -27,6 +34,13 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "Doubao",
     homepage: "https://www.doubao.com/",
     loginUrl: "https://www.doubao.com/",
+    enabled: true
+  },
+  {
+    id: "grok",
+    name: "Grok",
+    homepage: "https://grok.com/",
+    loginUrl: "https://grok.com/",
     enabled: true
   }
 ];

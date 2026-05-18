@@ -15,6 +15,10 @@ export class BrowserManager {
   private static sharedBrowserPromise?: Promise<BrowserContext>;
   private static sharedBrowserProcess?: ChildProcess;
   private static readonly sessions = new Map<ProviderId, ActiveBrowserSession>();
+  private static sessionQueue: Promise<void> = Promise.resolve();
+  private static readonly knownProviderHosts = new Set(
+    PROVIDERS.map((provider) => new URL(provider.homepage).host)
+  );
   private static readonly remoteDebuggingPort = 9222;
   private static readonly loginNavigationTimeoutMs = 15000;
 
@@ -174,8 +178,64 @@ export class BrowserManager {
     return BrowserManager.sharedBrowserPromise;
   }
 
+  private getPageHost(page: Page): string | undefined {
+    try {
+      return new URL(page.url()).host;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private isProviderPage(page: Page, providerId: ProviderId): boolean {
+    return this.getPageHost(page) === this.getProviderHost(providerId);
+  }
+
+  private isKnownProviderPage(page: Page): boolean {
+    const host = this.getPageHost(page);
+    return host ? BrowserManager.knownProviderHosts.has(host) : false;
+  }
+
+  private async closePage(page: Page): Promise<void> {
+    if (!page.isClosed()) {
+      await page.close().catch(() => undefined);
+    }
+  }
+
+  private async closeDuplicateProviderPages(
+    browserContext: BrowserContext,
+    providerId: ProviderId,
+    keepPage: Page
+  ): Promise<void> {
+    await Promise.all(
+      browserContext.pages().map(async (page) => {
+        if (page === keepPage || page.isClosed()) {
+          return;
+        }
+
+        if (this.isProviderPage(page, providerId)) {
+          await this.closePage(page);
+        }
+      })
+    );
+  }
+
+  private async runQueued<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = BrowserManager.sessionQueue;
+    let release: () => void = () => undefined;
+    BrowserManager.sessionQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await previous.catch(() => undefined);
+
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  }
+
   private findReusablePage(browserContext: BrowserContext, providerId: ProviderId): Page | undefined {
-    const host = this.getProviderHost(providerId);
     const claimedPages = new Set(
       [...BrowserManager.sessions.values()]
         .filter((session) => !session.page.isClosed())
@@ -188,7 +248,10 @@ export class BrowserManager {
       }
 
       const pageUrl = page.url();
-      return pageUrl.includes(host) || pageUrl === "about:blank";
+      return (
+        this.isProviderPage(page, providerId) ||
+        (pageUrl === "about:blank" && !this.isKnownProviderPage(page))
+      );
     });
   }
 
@@ -201,53 +264,20 @@ export class BrowserManager {
   }
 
   async getSession(providerId: ProviderId, visible = true): Promise<ActiveBrowserSession> {
-    const existing = BrowserManager.sessions.get(providerId);
-    if (existing && !existing.page.isClosed()) {
-      return existing;
-    }
-
-    const browserContext = await this.ensureSharedContext(visible);
-    const page = this.findReusablePage(browserContext, providerId) ?? (await browserContext.newPage());
-    return this.createSession(providerId, browserContext, page, visible);
-  }
-
-  async getNewSession(providerId: ProviderId, visible = true): Promise<ActiveBrowserSession> {
-    const browserContext = await this.ensureSharedContext(visible);
-    const page = await this.createNewWindowPage(browserContext);
-    return this.createSession(providerId, browserContext, page, visible);
-  }
-
-  private async createNewWindowPage(browserContext: BrowserContext): Promise<Page> {
-    const existingPages = new Set(browserContext.pages());
-
-    try {
-      const browserSession = await BrowserManager.sharedBrowser?.newBrowserCDPSession();
-      if (!browserSession) {
-        return browserContext.newPage();
+    return this.runQueued(async () => {
+      const existing = BrowserManager.sessions.get(providerId);
+      if (existing && !existing.page.isClosed()) {
+        await this.closeDuplicateProviderPages(existing.browserContext, providerId, existing.page);
+        return existing;
       }
 
-      await browserSession.send("Target.createTarget", {
-        url: "about:blank",
-        newWindow: true
-      });
-      await browserSession.detach().catch(() => undefined);
-
-      const deadline = Date.now() + 5000;
-      while (Date.now() < deadline) {
-        const page = browserContext
-          .pages()
-          .find((item) => !existingPages.has(item) && !item.isClosed());
-        if (page) {
-          return page;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    } catch {
-      // Some Chromium builds ignore Target.createTarget(newWindow).
-    }
-
-    return browserContext.newPage();
+      const browserContext = await this.ensureSharedContext(visible);
+      const page =
+        this.findReusablePage(browserContext, providerId) ?? (await browserContext.newPage());
+      const session = this.createSession(providerId, browserContext, page, visible);
+      await this.closeDuplicateProviderPages(browserContext, providerId, page);
+      return session;
+    });
   }
 
   private createSession(
@@ -292,11 +322,11 @@ export class BrowserManager {
       BrowserManager.sessions.clear();
 
       const existingPages = browserContext.pages().filter((page) => !page.isClosed());
-      for (const page of existingPages.slice(1)) {
+      for (const page of existingPages) {
         await page.close().catch(() => undefined);
       }
 
-      const primaryPage = existingPages[0] ?? (await browserContext.newPage());
+      const primaryPage = await browserContext.newPage();
       const sessions: ActiveBrowserSession[] = [];
       const navigations: Promise<void>[] = [];
 

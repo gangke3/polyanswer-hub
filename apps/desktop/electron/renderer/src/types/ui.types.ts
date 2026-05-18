@@ -21,6 +21,7 @@ declare global {
       listHistory: () => Promise<import("@multi-ai/shared").SavedTaskHistoryItem[]>;
       deleteHistory: (id: string) => Promise<import("@multi-ai/shared").SavedTaskHistoryItem[]>;
       clearHistory: () => Promise<import("@multi-ai/shared").SavedTaskHistoryItem[]>;
+      exportHistoryToText: (id: string) => Promise<{ canceled: boolean; path?: string }>;
       createTask: (
         input: import("@multi-ai/shared").CreateTaskInput
       ) => Promise<import("@multi-ai/orchestrator").TaskExecutionResult>;

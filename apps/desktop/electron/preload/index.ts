@@ -14,6 +14,7 @@ const api = {
   listHistory: () => ipcRenderer.invoke("history:list"),
   deleteHistory: (id: string) => ipcRenderer.invoke("history:delete", id),
   clearHistory: () => ipcRenderer.invoke("history:clear"),
+  exportHistoryToText: (id: string) => ipcRenderer.invoke("history:export-text", id),
   createTask: (input: unknown) => ipcRenderer.invoke("task:create", input)
 };
 

@@ -24,7 +24,7 @@ Stores one synthesized result per task.
 
 ### provider_sessions
 
-Stores persistent session metadata for ChatGPT, Gemini, Kimi, and Doubao.
+Stores persistent session metadata for ChatGPT, Claude, Gemini, Kimi, Doubao, and Grok.
 
 ### task_events
 
@@ -35,4 +35,3 @@ Stores state transitions and diagnostics.
 - `selected_providers_json` keeps the initial provider list immutable for history replay
 - `task_events` helps debug fragile provider automation
 - raw artifact paths are stored instead of blobs to keep the database small
-
