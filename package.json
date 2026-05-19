@@ -37,7 +37,7 @@
     "eslint": "^10.4.0",
     "globals": "^17.6.0",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.59.3"
+    "typescript-eslint": "^8.59.4"
   },
   "scripts": {
     "build": "npm run build -ws --if-present",
