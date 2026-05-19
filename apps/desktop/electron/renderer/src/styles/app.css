@@ -726,6 +726,58 @@ button {
   flex: 0 0 auto;
 }
 
+.main-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.language-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+}
+
+.language-switch-label {
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.language-option {
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.language-option:hover {
+  color: var(--text);
+}
+
+.language-option-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.language-option-active:hover {
+  color: #fff;
+}
+
 .hero-stage {
   width: min(860px, 100%);
   margin: clamp(56px, 15vh, 148px) auto 34px;
@@ -1138,6 +1190,10 @@ button {
   .main-toolbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .main-toolbar-actions {
+    justify-content: flex-start;
   }
 
   .hero-stage h2 {

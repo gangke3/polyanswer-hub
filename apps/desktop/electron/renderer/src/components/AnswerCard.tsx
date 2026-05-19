@@ -1,6 +1,7 @@
 interface AnswerCardProps {
   title: string;
   status: string;
+  statusText?: string;
   body: string;
 }
 
@@ -24,7 +25,7 @@ export function AnswerCard(props: AnswerCardProps) {
     <article className={`answer-card${isError ? " answer-card-error" : ""}`}>
       <div className="answer-card-header">
         <h3>{props.title}</h3>
-        <span className="pill">{displayStatus(props.status)}</span>
+        <span className="pill">{props.statusText ?? displayStatus(props.status)}</span>
       </div>
       <pre className="answer-card-body">{props.body}</pre>
     </article>

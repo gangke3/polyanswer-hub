@@ -18,6 +18,7 @@ type LogLevel = "info" | "success" | "error";
 type LogEntry = { id: string; timestamp: string; level: LogLevel; message: string };
 type ProviderPhase = "sent" | "fetching" | "waiting";
 type ProviderProgress = Record<string, ProviderPhase>;
+type Language = "zh" | "en";
 type ResultTab = {
   id: string;
   label: string;
@@ -35,83 +36,532 @@ const PROVIDER_LABELS: Record<ProviderId, string> = {
   grok: "Grok"
 };
 
-const PROVIDER_NOTES: Record<ProviderId, string> = {
-  chatgpt: "浏览器模式适合手动登录和处理验证页。",
-  claude: "Claude 浏览器模式需要先登录 claude.ai，首次接入建议先手动确认会话已可用。",
-  gemini: "Gemini 当前建议优先使用浏览器模式，便于复用已登录会话。",
-  kimi: "Kimi 浏览器模式通常需要先完成登录，未登录时任务会提示重新验证。",
-  doubao: "豆包浏览器模式通常需要先完成登录，未登录时任务会提示重新验证。",
-  grok: "Grok 浏览器模式需要先登录 grok.com，登录后即可正常使用。"
-};
+const LANGUAGE_STORAGE_KEY = "duoask.language";
 
-function formatAnswerBody(answer: TaskResponse["answers"][number]) {
-  if (answer.answer?.answerText) {
-    return answer.answer.answerText;
-  }
-
-  if (answer.errorCode === "MANUAL_VERIFICATION_REQUIRED") {
-    return "该平台需要先在浏览器中完成人工验证，然后重新运行任务。";
-  }
-
-  if (answer.errorCode === "LOGIN_REQUIRED") {
-    return "该平台当前尚未登录，请先在浏览器中登录后重试。";
-  }
-
-  return answer.errorMessage ?? "暂无结果";
-}
-
-function statusLabel(status: string) {
-  const labels: Record<string, string> = {
+const zhCopy = {
+  htmlLang: "zh-CN",
+  locale: "zh-CN",
+  languageSwitchAria: "切换界面语言",
+  languageLabel: "语言",
+  languages: {
+    zh: "中文",
+    en: "English"
+  },
+  brand: {
+    displayName: BRAND.displayName as string,
+    tagline: BRAND.shortTagline as string,
+    logoAlt: `${BRAND.displayName} 标志`
+  },
+  providerNotes: {
+    chatgpt: "浏览器模式适合手动登录和处理验证页。",
+    claude: "Claude 浏览器模式需要先登录 claude.ai，首次接入建议先手动确认会话已可用。",
+    gemini: "Gemini 当前建议优先使用浏览器模式，便于复用已登录会话。",
+    kimi: "Kimi 浏览器模式通常需要先完成登录，未登录时任务会提示重新验证。",
+    doubao: "豆包浏览器模式通常需要先完成登录，未登录时任务会提示重新验证。",
+    grok: "Grok 浏览器模式需要先登录 grok.com，登录后即可正常使用。"
+  } as Record<ProviderId, string>,
+  statusLabels: {
     completed: "已完成",
     failed: "失败",
     running: "运行中",
     partial_completed: "部分完成",
     cancelled: "已取消",
-    draft: "草稿"
-  };
+    draft: "草稿",
+    timeout: "超时"
+  } as Record<string, string>,
+  answer: {
+    manualVerificationRequired: "该平台需要先在浏览器中完成人工验证，然后重新运行任务。",
+    loginRequired: "该平台当前尚未登录，请先在浏览器中登录后重试。",
+    noResult: "暂无结果",
+    emptySummary: "暂无综合内容。",
+    noHistorySummary: "这条历史任务还没有综合结果。"
+  },
+  common: {
+    summary: "综合",
+    none: "无",
+    listSeparator: "、",
+    providerListSeparator: " · ",
+    expand: "展开",
+    collapseSidebar: "收起侧栏",
+    expandSidebar: "展开侧栏",
+    browser: "浏览器",
+    processing: "处理中",
+    result: "结果",
+    ready: "已就绪",
+    waitingLogin: "等待登录",
+    canAsk: "可提问",
+    selectedProviderFallback: "还没有选择平台",
+    noSelectedProvider: "未选择平台",
+    providerCount: (count: number) => `${count} 个平台`,
+    selectedCount: (count: number) => `${count} 个已选`,
+    resultCount: (count: number) => `${count} 个结果`,
+    elapsed: (value: string) => `已等待 ${value}`
+  },
+  sidebar: {
+    runEyebrow: "本次运行",
+    platformModeTitle: "平台与模式",
+    chooseProviders: "选择平台",
+    autoSummarize: "自动总结所有答案",
+    autoSave: "自动保存到历史记录",
+    summaryProvider: "总结平台",
+    connectionEyebrow: "连接",
+    loginSession: "登录与会话",
+    settingsEyebrow: "设置",
+    providerTestEmail: "平台测试与邮件",
+    historyEyebrow: "历史",
+    recentTasks: "最近任务",
+    logsEyebrow: "日志",
+    runLogs: "运行日志"
+  },
+  login: {
+    preparing: "正在准备浏览器登录页，稍后会自动进入可提问状态。",
+    browserOpened: "浏览器已打开，请完成需要登录的平台。程序会在 20 秒后自动允许提问。",
+    browserOpenedLog: "登录页已打开，开始等待 20 秒。",
+    ready: "已进入可提问状态。若某个平台仍未登录，任务结果中会提示继续登录。",
+    readyLog: "已自动进入可提问状态。",
+    startupOpened: (count: number) => `程序已在启动时打开 ${count} 个登录标签页。请完成必要登录，20 秒后可开始提问。`,
+    startupLog: (count: number) => `程序启动时会由主进程打开 ${count} 个登录标签页。`,
+    reopenSuccess: (count: number) => `已重新打开 ${count} 个登录标签页。请完成必要登录，20 秒后可开始提问。`,
+    reopenSuccessLog: (count: number) => `已重新打开 ${count} 个登录标签页。`,
+    reopenFailed: (message: string) => `重新打开登录页失败：${message}。请再试一次。`,
+    reopenFailedLog: (message: string) => `重新打开登录页失败：${message}`,
+    opening: "打开中...",
+    reopenButton: "重新打开登录页",
+    markReady: "标记为已就绪",
+    manualReady: "已手动切换为可提问状态。",
+    manualReadyLog: "已手动标记为可提问状态。"
+  },
+  settings: {
+    emailNotifications: "邮件通知",
+    enabled: "已开启",
+    disabled: "已关闭",
+    emailAutoSend: "任务完成后自动发送邮件",
+    recipientEmail: "接收邮箱",
+    smtpUser: "SMTP 账号",
+    smtpPass: "SMTP 密码",
+    saving: "保存中...",
+    saveEmail: "保存邮件设置",
+    emailNote: "默认读取环境变量中的 SMTP 配置，也可以单独修改收件邮箱并持久保存。",
+    platformSaving: "正在保存平台配置...",
+    testing: "测试中...",
+    test: "测试"
+  },
+  history: {
+    loading: "读取中...",
+    refresh: "刷新",
+    clear: "清空",
+    empty: "暂无历史记录。开启自动保存后，问题、答案和综合结论会保存在这里。",
+    collapse: "收起",
+    view: "查看",
+    exporting: "保存中...",
+    save: "保存",
+    delete: "删除",
+    tabAria: "历史任务结果视图"
+  },
+  logsPanel: {
+    clear: "清空日志",
+    empty: "这里会显示程序执行状态和关键日志。"
+  },
+  hero: {
+    titleNew: "你在忙什么？",
+    titleLoaded: "继续这个问题",
+    subtitleNew: "左侧统一管理平台、登录、邮件、历史与日志，中间区域只负责提问与查看答案。",
+    subtitleLoaded: "这条历史任务已经载入，你可以直接再次提问，或在下方继续查看综合结果与各平台回复。",
+    noticeLogin: "浏览器登录准备完成后即可运行",
+    noticeSelect: "请先在左侧选择至少一个平台",
+    noticeReady: "准备就绪，可以开始一次多平台提问",
+    placeholder: "有问题，尽管问",
+    ask: "提问",
+    sessionReady: "浏览器会话已就绪",
+    sessionPreparing: "浏览器登录准备中",
+    runningHint: "正在处理中"
+  },
+  modes: {
+    summaryOn: (providerName: string) => `自动总结 · ${providerName}`,
+    summaryOff: "仅对比，不自动总结",
+    autoSaveOn: "自动保存到历史",
+    autoSaveOff: "仅本次查看，不自动保存"
+  },
+  waiting: {
+    titleSummary: "正在收集回答并生成综合结论",
+    titleCompare: "正在等待多平台回答返回",
+    description: (count: number, names: string) => `问题已发送到 ${count} 个平台：${names}。返回结果后会直接展示在下方。`,
+    tipSummary: (providerName: string) => `全部平台完成后，会优先展示 ${providerName} 生成的综合答案。`,
+    tipCompare: "结果返回后，你可以按平台切换查看每一份原始回复。",
+    sent: "已发送",
+    fetching: "正在获取",
+    waiting: "等待回复",
+    summarySuffix: "总结",
+    pending: "全部完成后执行"
+  },
+  result: {
+    taskStatus: (status: string) => `任务状态：${status}`,
+    fallbackSummary: (total: number, completed: number, failed: number) =>
+      `已返回 ${total} 个结果，成功 ${completed} 个，失败 ${failed} 个`,
+    summary: (total: number, completed: number, completedNames: string, failed: number, failedNames: string) =>
+      `已返回 ${total} 个结果，成功 ${completed} 个：${completedNames}；失败 ${failed} 个：${failedNames}`,
+    manualVerification: "需要人工验证",
+    manualVerificationMessage: (names: string) => `${names} 需要先到浏览器中完成验证，然后重新运行任务。`,
+    tabsAria: "结果视图",
+    emptySummaryTitle: "还没有综合结果",
+    emptySummaryDescription: "运行完成后，这里会优先展示总结后的答案。",
+    emptyTitle: "答案会在这里聚合",
+    emptyDescription: "提问后会先展示综合答案，再按平台切换查看原始回复。"
+  },
+  summary: {
+    answerTitle: "综合答案",
+    answerTitleWithProvider: (providerName: string) => `综合答案 - ${providerName}`
+  },
+  feedback: {
+    configSaved: "配置已保存。",
+    saveFailed: (message: string) => `保存失败：${message}`,
+    emailSaving: "正在保存邮件设置...",
+    emailSaved: "邮件设置已保存。",
+    testing: "正在测试，请稍等...",
+    testSucceeded: (message: string) => `测试成功：${message}`,
+    returnedResult: "已返回结果。",
+    noReturnedResult: "未返回结果。",
+    testFailed: (message: string) => `测试失败：${message}`
+  },
+  logs: {
+    historyReadFailed: (message: string) => `读取历史记录失败：${message}`,
+    appLoaded: (count: number) => `主页面已加载，读取到 ${count} 个平台。`,
+    configReadFailed: (message: string) => `读取基础配置失败：${message}`,
+    providerSaving: (providerName: string) => `正在保存 ${providerName} 配置。`,
+    providerSaved: (providerName: string) => `${providerName} 配置已保存。`,
+    providerSaveFailed: (providerName: string, message: string) => `保存 ${providerName} 配置失败：${message}`,
+    emailSaving: "正在保存邮件设置。",
+    emailSaved: "邮件设置已保存。",
+    emailSaveFailed: (message: string) => `保存邮件设置失败：${message}`,
+    providerTesting: (providerName: string) => `正在测试 ${providerName}。`,
+    providerTestSucceeded: (providerName: string) => `${providerName} 测试成功。`,
+    providerTestFailed: (providerName: string, message: string) => `${providerName} 测试失败：${message}`,
+    taskStarted: (providerNames: string) => `开始执行任务，目标平台：${providerNames}。`,
+    autoSummaryEnabled: (providerName: string) => `自动总结已开启，将使用 ${providerName} 总结全部答案。`,
+    autoSaveEnabled: "自动保存已开启，任务完成后会写入本地历史记录。",
+    emailEnabled: (email: string) => `邮件发送已开启，任务完成后会自动发送到 ${email}。`,
+    taskCompleted: (summary: string) => `任务完成，${summary}。`,
+    providerStatus: (providerName: string, status: string, message?: string) =>
+      `${providerName} 状态：${status}${message ? `，${message}` : ""}`,
+    providerManualVerification: (providerName: string) => `${providerName} 需要人工验证。请到浏览器中完成验证后重新提问。`,
+    autoSummaryStatus: (providerName: string, status: string, message?: string) =>
+      `${providerName} 自动总结状态：${status}${message ? `，${message}` : ""}`,
+    emailSent: (email: string) => `邮件已尝试自动发送到 ${email}。`,
+    taskFailed: (message: string) => `执行任务失败：${message}`,
+    historyLoaded: (question: string) => `已载入历史记录：${question}`,
+    historyDeleted: "历史记录已删除。",
+    historyDeleteFailed: (message: string) => `删除历史记录失败：${message}`,
+    historyCleared: "历史记录已清空。",
+    historyClearFailed: (message: string) => `清空历史记录失败：${message}`,
+    exportCanceled: "已取消保存文本文件。",
+    exportSaved: (path: string) => `任务已保存到本地文件：${path}`,
+    exportFailed: (message: string) => `保存任务文本失败：${message}`
+  },
+  testQuestion: "请只回复 OK"
+};
 
-  return labels[status] ?? status;
+type UiCopy = typeof zhCopy;
+
+const enCopy: UiCopy = {
+  htmlLang: "en",
+  locale: "en-US",
+  languageSwitchAria: "Switch interface language",
+  languageLabel: "Language",
+  languages: {
+    zh: "中文",
+    en: "English"
+  },
+  brand: {
+    displayName: BRAND.enName,
+    tagline: "Ask once, compare answers across sources",
+    logoAlt: `${BRAND.enName} logo`
+  },
+  providerNotes: {
+    chatgpt: "Browser mode is best for manual sign-in and verification pages.",
+    claude: "Claude browser mode requires signing in to claude.ai first. Confirm the session is ready before first use.",
+    gemini: "Gemini currently works best in browser mode so it can reuse your signed-in session.",
+    kimi: "Kimi browser mode usually requires signing in first. Tasks will ask for re-verification when signed out.",
+    doubao: "Doubao browser mode usually requires signing in first. Tasks will ask for re-verification when signed out.",
+    grok: "Grok browser mode requires signing in to grok.com. It can be used normally after sign-in."
+  } as Record<ProviderId, string>,
+  statusLabels: {
+    completed: "Completed",
+    failed: "Failed",
+    running: "Running",
+    partial_completed: "Partially completed",
+    cancelled: "Cancelled",
+    draft: "Draft",
+    timeout: "Timed out"
+  } as Record<string, string>,
+  answer: {
+    manualVerificationRequired: "This provider needs manual verification in the browser before you run the task again.",
+    loginRequired: "This provider is not signed in. Please sign in from the browser and try again.",
+    noResult: "No result yet",
+    emptySummary: "No summary content yet.",
+    noHistorySummary: "This saved task does not have a summary yet."
+  },
+  common: {
+    summary: "Summary",
+    none: "None",
+    listSeparator: ", ",
+    providerListSeparator: " · ",
+    expand: "Expand",
+    collapseSidebar: "Collapse sidebar",
+    expandSidebar: "Expand sidebar",
+    browser: "Browser",
+    processing: "Processing",
+    result: "Results",
+    ready: "Ready",
+    waitingLogin: "Waiting for sign-in",
+    canAsk: "Ready to ask",
+    selectedProviderFallback: "No providers selected yet",
+    noSelectedProvider: "No providers selected",
+    providerCount: (count: number) => `${count} provider${count === 1 ? "" : "s"}`,
+    selectedCount: (count: number) => `${count} selected`,
+    resultCount: (count: number) => `${count} result${count === 1 ? "" : "s"}`,
+    elapsed: (value: string) => `Waited ${value}`
+  },
+  sidebar: {
+    runEyebrow: "This run",
+    platformModeTitle: "Providers and Mode",
+    chooseProviders: "Choose providers",
+    autoSummarize: "Auto-summarize all answers",
+    autoSave: "Auto-save to history",
+    summaryProvider: "Summary provider",
+    connectionEyebrow: "Connection",
+    loginSession: "Sign-in and Sessions",
+    settingsEyebrow: "Settings",
+    providerTestEmail: "Provider Tests and Email",
+    historyEyebrow: "History",
+    recentTasks: "Recent Tasks",
+    logsEyebrow: "Logs",
+    runLogs: "Run Logs"
+  },
+  login: {
+    preparing: "Preparing browser sign-in pages. Asking will be enabled shortly.",
+    browserOpened: "Browser pages are open. Complete sign-in where needed. Asking will be enabled in 20 seconds.",
+    browserOpenedLog: "Sign-in pages opened. Waiting 20 seconds.",
+    ready: "Ready to ask. If a provider is still signed out, the task result will tell you to continue signing in.",
+    readyLog: "Automatically marked as ready to ask.",
+    startupOpened: (count: number) =>
+      `The app opened ${count} sign-in tab${count === 1 ? "" : "s"} at startup. Complete required sign-ins, then ask in 20 seconds.`,
+    startupLog: (count: number) =>
+      `The main process will open ${count} sign-in tab${count === 1 ? "" : "s"} at startup.`,
+    reopenSuccess: (count: number) =>
+      `Reopened ${count} sign-in tab${count === 1 ? "" : "s"}. Complete required sign-ins, then ask in 20 seconds.`,
+    reopenSuccessLog: (count: number) => `Reopened ${count} sign-in tab${count === 1 ? "" : "s"}.`,
+    reopenFailed: (message: string) => `Failed to reopen sign-in pages: ${message}. Please try again.`,
+    reopenFailedLog: (message: string) => `Failed to reopen sign-in pages: ${message}`,
+    opening: "Opening...",
+    reopenButton: "Reopen sign-in pages",
+    markReady: "Mark as ready",
+    manualReady: "Manually switched to ready-to-ask state.",
+    manualReadyLog: "Manually marked as ready to ask."
+  },
+  settings: {
+    emailNotifications: "Email Notifications",
+    enabled: "On",
+    disabled: "Off",
+    emailAutoSend: "Send email automatically when a task finishes",
+    recipientEmail: "Recipient email",
+    smtpUser: "SMTP account",
+    smtpPass: "SMTP password",
+    saving: "Saving...",
+    saveEmail: "Save email settings",
+    emailNote: "SMTP defaults come from environment variables. You can also change and persist the recipient email here.",
+    platformSaving: "Saving provider settings...",
+    testing: "Testing...",
+    test: "Test"
+  },
+  history: {
+    loading: "Loading...",
+    refresh: "Refresh",
+    clear: "Clear",
+    empty: "No history yet. Turn on auto-save to keep questions, answers, and summaries here.",
+    collapse: "Collapse",
+    view: "View",
+    exporting: "Saving...",
+    save: "Save",
+    delete: "Delete",
+    tabAria: "Saved task result view"
+  },
+  logsPanel: {
+    clear: "Clear logs",
+    empty: "Program status and key logs will appear here."
+  },
+  hero: {
+    titleNew: "What are you working on?",
+    titleLoaded: "Continue this question",
+    subtitleNew: "Manage providers, sign-in, email, history, and logs on the left. Ask and review answers in the center.",
+    subtitleLoaded: "This saved task is loaded. Ask it again, or keep reviewing the summary and provider replies below.",
+    noticeLogin: "You can run tasks after browser sign-in is ready",
+    noticeSelect: "Select at least one provider on the left",
+    noticeReady: "Ready for a multi-provider question",
+    placeholder: "Ask anything",
+    ask: "Ask",
+    sessionReady: "Browser sessions are ready",
+    sessionPreparing: "Preparing browser sign-in",
+    runningHint: "Processing"
+  },
+  modes: {
+    summaryOn: (providerName: string) => `Auto-summary · ${providerName}`,
+    summaryOff: "Compare only, no auto-summary",
+    autoSaveOn: "Auto-save to history",
+    autoSaveOff: "View this run only, no auto-save"
+  },
+  waiting: {
+    titleSummary: "Collecting answers and generating a summary",
+    titleCompare: "Waiting for multi-provider answers",
+    description: (count: number, names: string) =>
+      `The question was sent to ${count} provider${count === 1 ? "" : "s"}: ${names}. Results will appear below as they return.`,
+    tipSummary: (providerName: string) => `After every provider finishes, the summary from ${providerName} will appear first.`,
+    tipCompare: "When results return, switch by provider to review each original answer.",
+    sent: "Sent",
+    fetching: "Fetching",
+    waiting: "Waiting",
+    summarySuffix: "summary",
+    pending: "Runs after all providers finish"
+  },
+  result: {
+    taskStatus: (status: string) => `Task status: ${status}`,
+    fallbackSummary: (total: number, completed: number, failed: number) =>
+      `Returned ${total} result${total === 1 ? "" : "s"}, ${completed} succeeded, ${failed} failed`,
+    summary: (total: number, completed: number, completedNames: string, failed: number, failedNames: string) =>
+      `Returned ${total} result${total === 1 ? "" : "s"}, ${completed} succeeded: ${completedNames}; ${failed} failed: ${failedNames}`,
+    manualVerification: "Manual verification required",
+    manualVerificationMessage: (names: string) => `${names} need browser verification before you run the task again.`,
+    tabsAria: "Result view",
+    emptySummaryTitle: "No summary yet",
+    emptySummaryDescription: "After the run finishes, the summarized answer will appear here first.",
+    emptyTitle: "Answers will be gathered here",
+    emptyDescription: "After asking, the summary appears first, followed by tabs for each provider's original reply."
+  },
+  summary: {
+    answerTitle: "Summary",
+    answerTitleWithProvider: (providerName: string) => `Summary - ${providerName}`
+  },
+  feedback: {
+    configSaved: "Settings saved.",
+    saveFailed: (message: string) => `Save failed: ${message}`,
+    emailSaving: "Saving email settings...",
+    emailSaved: "Email settings saved.",
+    testing: "Testing, please wait...",
+    testSucceeded: (message: string) => `Test succeeded: ${message}`,
+    returnedResult: "Received a result.",
+    noReturnedResult: "No result returned.",
+    testFailed: (message: string) => `Test failed: ${message}`
+  },
+  logs: {
+    historyReadFailed: (message: string) => `Failed to read history: ${message}`,
+    appLoaded: (count: number) => `Home loaded. Found ${count} provider${count === 1 ? "" : "s"}.`,
+    configReadFailed: (message: string) => `Failed to read base config: ${message}`,
+    providerSaving: (providerName: string) => `Saving ${providerName} settings.`,
+    providerSaved: (providerName: string) => `${providerName} settings saved.`,
+    providerSaveFailed: (providerName: string, message: string) => `Failed to save ${providerName} settings: ${message}`,
+    emailSaving: "Saving email settings.",
+    emailSaved: "Email settings saved.",
+    emailSaveFailed: (message: string) => `Failed to save email settings: ${message}`,
+    providerTesting: (providerName: string) => `Testing ${providerName}.`,
+    providerTestSucceeded: (providerName: string) => `${providerName} test succeeded.`,
+    providerTestFailed: (providerName: string, message: string) => `${providerName} test failed: ${message}`,
+    taskStarted: (providerNames: string) => `Starting task. Target providers: ${providerNames}.`,
+    autoSummaryEnabled: (providerName: string) => `Auto-summary is on. ${providerName} will summarize all answers.`,
+    autoSaveEnabled: "Auto-save is on. The task will be written to local history when finished.",
+    emailEnabled: (email: string) => `Email sending is on. The finished task will be sent to ${email}.`,
+    taskCompleted: (summary: string) => `Task completed. ${summary}.`,
+    providerStatus: (providerName: string, status: string, message?: string) =>
+      `${providerName} status: ${status}${message ? `, ${message}` : ""}`,
+    providerManualVerification: (providerName: string) =>
+      `${providerName} requires manual verification. Complete it in the browser, then ask again.`,
+    autoSummaryStatus: (providerName: string, status: string, message?: string) =>
+      `${providerName} auto-summary status: ${status}${message ? `, ${message}` : ""}`,
+    emailSent: (email: string) => `Attempted to send email to ${email}.`,
+    taskFailed: (message: string) => `Task failed: ${message}`,
+    historyLoaded: (question: string) => `Loaded history item: ${question}`,
+    historyDeleted: "History item deleted.",
+    historyDeleteFailed: (message: string) => `Failed to delete history item: ${message}`,
+    historyCleared: "History cleared.",
+    historyClearFailed: (message: string) => `Failed to clear history: ${message}`,
+    exportCanceled: "Text file save was canceled.",
+    exportSaved: (path: string) => `Task saved to local file: ${path}`,
+    exportFailed: (message: string) => `Failed to save task text: ${message}`
+  },
+  testQuestion: "Please reply with OK only"
+};
+
+const UI_COPY: Record<Language, UiCopy> = {
+  zh: zhCopy,
+  en: enCopy
+};
+
+function readStoredLanguage(): Language {
+  return window.localStorage.getItem(LANGUAGE_STORAGE_KEY) === "en" ? "en" : "zh";
+}
+
+function formatAnswerBody(answer: TaskResponse["answers"][number], copy: UiCopy) {
+  if (answer.answer?.answerText) {
+    return answer.answer.answerText;
+  }
+
+  if (answer.errorCode === "MANUAL_VERIFICATION_REQUIRED") {
+    return copy.answer.manualVerificationRequired;
+  }
+
+  if (answer.errorCode === "LOGIN_REQUIRED") {
+    return copy.answer.loginRequired;
+  }
+
+  return answer.errorMessage ?? copy.answer.noResult;
+}
+
+function statusLabel(status: string, copy: UiCopy) {
+  return copy.statusLabels[status] ?? status;
 }
 
 function providerName(providerId: ProviderId) {
   return PROVIDER_LABELS[providerId] ?? providerId;
 }
 
-function formatProviderNames(answers: TaskResponse["answers"], fallback = "无") {
+function formatProviderNames(answers: TaskResponse["answers"], copy: UiCopy, fallback = copy.common.none) {
   if (answers.length === 0) {
     return fallback;
   }
 
-  return answers.map((answer) => providerName(answer.providerId as ProviderId)).join("、");
+  return answers.map((answer) => providerName(answer.providerId as ProviderId)).join(copy.common.listSeparator);
 }
 
-function formatResultSummary(answers: TaskResponse["answers"]) {
+function formatResultSummary(answers: TaskResponse["answers"], copy: UiCopy) {
   const completed = answers.filter((answer) => answer.status === "completed");
   const failed = answers.filter((answer) => answer.status !== "completed");
 
-  return `已返回 ${answers.length} 个结果，成功 ${completed.length} 个：${formatProviderNames(
-    completed
-  )}；失败 ${failed.length} 个：${formatProviderNames(failed)}`;
+  return copy.result.summary(
+    answers.length,
+    completed.length,
+    formatProviderNames(completed, copy),
+    failed.length,
+    formatProviderNames(failed, copy)
+  );
 }
 
 function getPreferredSummary(
   source:
     | Pick<TaskResponse, "synthesis" | "autoSummary">
-    | Pick<SavedTaskHistoryItem, "synthesis" | "autoSummary">
+    | Pick<SavedTaskHistoryItem, "synthesis" | "autoSummary">,
+  copy: UiCopy
 ) {
   if (source.autoSummary) {
     return {
-      title: `综合答案 - ${
+      title: copy.summary.answerTitleWithProvider(
         PROVIDER_LABELS[source.autoSummary.providerId as ProviderId] ?? source.autoSummary.providerId
-      }`,
+      ),
       status: source.autoSummary.status,
-      body: formatAnswerBody(source.autoSummary)
+      body: formatAnswerBody(source.autoSummary, copy)
     };
   }
 
   if (source.synthesis) {
     return {
-      title: "综合答案",
+      title: copy.summary.answerTitle,
       status: "completed",
       body: source.synthesis.finalAnswer
     };
@@ -121,6 +571,9 @@ function getPreferredSummary(
 }
 
 export function HomePage() {
+  const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
+  const copy = UI_COPY[language];
+  const copyRef = useRef(copy);
   const [providers, setProviders] = useState<ProviderMeta[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>([
@@ -154,7 +607,7 @@ export function HomePage() {
   const [historyExportingId, setHistoryExportingId] = useState<string | null>(null);
   const [loadedHistoryItemId, setLoadedHistoryItemId] = useState<string | null>(null);
   const [emailFeedback, setEmailFeedback] = useState<ProviderFeedback | null>(null);
-  const [loginHint, setLoginHint] = useState("正在准备浏览器登录页，稍后会自动进入可提问状态。");
+  const [loginHint, setLoginHint] = useState(() => copy.login.preparing);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeResultTab, setActiveResultTab] = useState("summary");
   const autoLoginTimerRef = useRef<number | null>(null);
@@ -172,10 +625,15 @@ export function HomePage() {
 
   const completedCount = result?.answers.filter((answer) => answer.status === "completed").length ?? 0;
   const failedCount = result ? result.answers.length - completedCount : 0;
-  const resultSummary = result ? formatResultSummary(result.answers) : "";
+  const resultSummary = result ? formatResultSummary(result.answers, copy) : "";
+
+  function handleLanguageChange(nextLanguage: Language) {
+    setLanguage(nextLanguage);
+    setLoginHint(loginReady ? UI_COPY[nextLanguage].login.ready : UI_COPY[nextLanguage].login.browserOpened);
+  }
 
   function appendLog(level: LogLevel, message: string) {
-    const timestamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    const timestamp = new Date().toLocaleTimeString(copyRef.current.locale, { hour12: false });
     setLogs((current) => [
       ...current.slice(-199),
       {
@@ -192,7 +650,7 @@ export function HomePage() {
     try {
       setHistoryItems(await window.multiAiApi.listHistory());
     } catch (error) {
-      appendLog("error", `读取历史记录失败：${error instanceof Error ? error.message : String(error)}`);
+      appendLog("error", copy.logs.historyReadFailed(error instanceof Error ? error.message : String(error)));
     } finally {
       setHistoryLoading(false);
     }
@@ -208,16 +666,26 @@ export function HomePage() {
   function scheduleAutoLoginReady() {
     clearAutoLoginTimer();
     setLoginReady(false);
-    setLoginHint("浏览器已打开，请完成需要登录的平台。程序会在 20 秒后自动允许提问。");
-    appendLog("info", "登录页已打开，开始等待 20 秒。");
+    setLoginHint(copy.login.browserOpened);
+    appendLog("info", copy.login.browserOpenedLog);
 
     autoLoginTimerRef.current = window.setTimeout(() => {
+      const currentCopy = copyRef.current;
       setLoginReady(true);
-      setLoginHint("已进入可提问状态。若某个平台仍未登录，任务结果中会提示继续登录。");
-      appendLog("success", "已自动进入可提问状态。");
+      setLoginHint(currentCopy.login.ready);
+      appendLog("success", currentCopy.login.readyLog);
       autoLoginTimerRef.current = null;
     }, 20000);
   }
+
+  useEffect(() => {
+    copyRef.current = copy;
+  }, [copy]);
+
+  useEffect(() => {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    document.documentElement.lang = copy.htmlLang;
+  }, [copy.htmlLang, language]);
 
   useEffect(() => {
     let active = true;
@@ -230,14 +698,14 @@ export function HomePage() {
 
         setProviders(providerList);
         setSettings(appSettings);
-        appendLog("success", `主页面已加载，读取到 ${providerList.length} 个平台。`);
+        appendLog("success", copy.logs.appLoaded(providerList.length));
       })
       .catch((error) => {
         if (!active) {
           return;
         }
 
-        appendLog("error", `读取基础配置失败：${error instanceof Error ? error.message : String(error)}`);
+        appendLog("error", copy.logs.configReadFailed(error instanceof Error ? error.message : String(error)));
       });
 
     return () => {
@@ -250,8 +718,8 @@ export function HomePage() {
   }, []);
 
   useEffect(() => {
-    setLoginHint(`程序已在启动时打开 ${selectedProviderIds.length} 个登录标签页。请完成必要登录，20 秒后可开始提问。`);
-    appendLog("info", `程序启动时会由主进程打开 ${selectedProviderIds.length} 个登录标签页。`);
+    setLoginHint(copy.login.startupOpened(selectedProviderIds.length));
+    appendLog("info", copy.login.startupLog(selectedProviderIds.length));
     scheduleAutoLoginReady();
 
     return () => {
@@ -278,7 +746,7 @@ export function HomePage() {
     }
 
     return [
-      { id: "summary", label: "综合", kind: "summary" },
+      { id: "summary", label: copy.common.summary, kind: "summary" },
       ...result.answers.map((answer) => ({
         id: `provider-${answer.providerId}`,
         label: PROVIDER_LABELS[answer.providerId as ProviderId] ?? answer.providerId,
@@ -287,7 +755,7 @@ export function HomePage() {
         kind: "provider" as const
       }))
     ];
-  }, [result]);
+  }, [copy.common.summary, result]);
 
   useEffect(() => {
     if (resultTabs.length === 0) {
@@ -349,16 +817,16 @@ export function HomePage() {
     }
 
     setSavingSettings(true);
-    appendLog("info", `正在保存 ${PROVIDER_LABELS[providerId]} 配置。`);
+    appendLog("info", copy.logs.providerSaving(PROVIDER_LABELS[providerId]));
 
     try {
       const next = await window.multiAiApi.updateProviderSettings(providerId, settings.providers[providerId]);
       setSettings(next);
       setProviderFeedback((current) => ({
         ...current,
-        [providerId]: { kind: "success", message: "配置已保存。" }
+        [providerId]: { kind: "success", message: copy.feedback.configSaved }
       }));
-      appendLog("success", `${PROVIDER_LABELS[providerId]} 配置已保存。`);
+      appendLog("success", copy.logs.providerSaved(PROVIDER_LABELS[providerId]));
       return next;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -366,10 +834,10 @@ export function HomePage() {
         ...current,
         [providerId]: {
           kind: "error",
-          message: `保存失败：${message}`
+          message: copy.feedback.saveFailed(message)
         }
       }));
-      appendLog("error", `保存 ${PROVIDER_LABELS[providerId]} 配置失败：${message}`);
+      appendLog("error", copy.logs.providerSaveFailed(PROVIDER_LABELS[providerId], message));
       return null;
     } finally {
       setSavingSettings(false);
@@ -382,19 +850,19 @@ export function HomePage() {
     }
 
     setSavingSettings(true);
-    setEmailFeedback({ kind: "info", message: "正在保存邮件设置..." });
-    appendLog("info", "正在保存邮件设置。");
+    setEmailFeedback({ kind: "info", message: copy.feedback.emailSaving });
+    appendLog("info", copy.logs.emailSaving);
 
     try {
       const next = await window.multiAiApi.saveSettings(settings);
       setSettings(next);
-      setEmailFeedback({ kind: "success", message: "邮件设置已保存。" });
-      appendLog("success", "邮件设置已保存。");
+      setEmailFeedback({ kind: "success", message: copy.feedback.emailSaved });
+      appendLog("success", copy.logs.emailSaved);
       return next;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setEmailFeedback({ kind: "error", message: `保存失败：${message}` });
-      appendLog("error", `保存邮件设置失败：${message}`);
+      setEmailFeedback({ kind: "error", message: copy.feedback.saveFailed(message) });
+      appendLog("error", copy.logs.emailSaveFailed(message));
       return null;
     } finally {
       setSavingSettings(false);
@@ -405,9 +873,9 @@ export function HomePage() {
     setTestingProviderId(providerId);
     setProviderFeedback((current) => ({
       ...current,
-      [providerId]: { kind: "info", message: "正在测试，请稍等..." }
+      [providerId]: { kind: "info", message: copy.feedback.testing }
     }));
-    appendLog("info", `正在测试 ${PROVIDER_LABELS[providerId]}。`);
+    appendLog("info", copy.logs.providerTesting(PROVIDER_LABELS[providerId]));
 
     try {
       const saved = await saveProviderSettings(providerId);
@@ -416,7 +884,7 @@ export function HomePage() {
       }
 
       const response = await window.multiAiApi.createTask({
-        question: "请只回复 OK",
+        question: copy.testQuestion,
         providerIds: [providerId],
         autoSynthesize: false,
         timeoutMs: 45000
@@ -428,20 +896,20 @@ export function HomePage() {
           ...current,
           [providerId]: {
             kind: "success",
-            message: `测试成功：${answer.answer?.answerText ?? "已返回结果。"}`
+            message: copy.feedback.testSucceeded(answer.answer?.answerText ?? copy.feedback.returnedResult)
           }
         }));
-        appendLog("success", `${PROVIDER_LABELS[providerId]} 测试成功。`);
+        appendLog("success", copy.logs.providerTestSucceeded(PROVIDER_LABELS[providerId]));
       } else {
-        const message = answer?.errorMessage ?? "未返回结果。";
+        const message = answer?.errorMessage ?? copy.feedback.noReturnedResult;
         setProviderFeedback((current) => ({
           ...current,
           [providerId]: {
             kind: "error",
-            message: `测试失败：${message}`
+            message: copy.feedback.testFailed(message)
           }
         }));
-        appendLog("error", `${PROVIDER_LABELS[providerId]} 测试失败：${message}`);
+        appendLog("error", copy.logs.providerTestFailed(PROVIDER_LABELS[providerId], message));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -449,10 +917,10 @@ export function HomePage() {
         ...current,
         [providerId]: {
           kind: "error",
-          message: `测试失败：${message}`
+          message: copy.feedback.testFailed(message)
         }
       }));
-      appendLog("error", `${PROVIDER_LABELS[providerId]} 测试失败：${message}`);
+      appendLog("error", copy.logs.providerTestFailed(PROVIDER_LABELS[providerId], message));
     } finally {
       setTestingProviderId(null);
     }
@@ -519,19 +987,19 @@ export function HomePage() {
     startProviderProgress(selectedProviderIds);
     appendLog(
       "info",
-      `开始执行任务，目标平台：${selectedProviderIds
+      copy.logs.taskStarted(selectedProviderIds
         .map((id) => PROVIDER_LABELS[id as ProviderId] ?? id)
-        .join("、")}。`
+        .join(copy.common.listSeparator))
     );
 
     if (autoSummarize) {
-      appendLog("info", `自动总结已开启，将使用 ${PROVIDER_LABELS[summaryProviderId]} 总结全部答案。`);
+      appendLog("info", copy.logs.autoSummaryEnabled(PROVIDER_LABELS[summaryProviderId]));
     }
     if (autoSave) {
-      appendLog("info", "自动保存已开启，任务完成后会写入本地历史记录。");
+      appendLog("info", copy.logs.autoSaveEnabled);
     }
     if (emailSettings.enabled && emailSettings.recipientEmail.trim()) {
-      appendLog("info", `邮件发送已开启，任务完成后会自动发送到 ${emailSettings.recipientEmail.trim()}。`);
+      appendLog("info", copy.logs.emailEnabled(emailSettings.recipientEmail.trim()));
     }
 
     const payload: CreateTaskInput = {
@@ -551,17 +1019,17 @@ export function HomePage() {
       setLoadedHistoryItemId(null);
       setQuestion("");
       shouldFocusQuestionRef.current = true;
-      appendLog("success", `任务完成，${formatResultSummary(response.answers)}。`);
+      appendLog("success", copy.logs.taskCompleted(formatResultSummary(response.answers, copy)));
 
       for (const answer of response.answers) {
         const label = PROVIDER_LABELS[answer.providerId as ProviderId] ?? answer.providerId;
         appendLog(
           answer.status === "completed" ? "success" : "error",
-          `${label} 状态：${statusLabel(answer.status)}${answer.errorMessage ? `，${answer.errorMessage}` : ""}`
+          copy.logs.providerStatus(label, statusLabel(answer.status, copy), answer.errorMessage)
         );
 
         if (answer.errorCode === "MANUAL_VERIFICATION_REQUIRED") {
-          appendLog("info", `${label} 需要人工验证。请到浏览器中完成验证后重新提问。`);
+          appendLog("info", copy.logs.providerManualVerification(label));
         }
       }
 
@@ -569,9 +1037,11 @@ export function HomePage() {
         const label = PROVIDER_LABELS[response.autoSummary.providerId as ProviderId] ?? response.autoSummary.providerId;
         appendLog(
           response.autoSummary.status === "completed" ? "success" : "error",
-          `${label} 自动总结状态：${statusLabel(response.autoSummary.status)}${
-            response.autoSummary.errorMessage ? `，${response.autoSummary.errorMessage}` : ""
-          }`
+          copy.logs.autoSummaryStatus(
+            label,
+            statusLabel(response.autoSummary.status, copy),
+            response.autoSummary.errorMessage
+          )
         );
       }
 
@@ -579,10 +1049,10 @@ export function HomePage() {
         await refreshHistory();
       }
       if (emailSettings.enabled && emailSettings.recipientEmail.trim()) {
-        appendLog("success", `邮件已尝试自动发送到 ${emailSettings.recipientEmail.trim()}。`);
+        appendLog("success", copy.logs.emailSent(emailSettings.recipientEmail.trim()));
       }
     } catch (error) {
-      appendLog("error", `执行任务失败：${error instanceof Error ? error.message : String(error)}`);
+      appendLog("error", copy.logs.taskFailed(error instanceof Error ? error.message : String(error)));
     } finally {
       stopProviderProgress();
       setRunning(false);
@@ -593,13 +1063,13 @@ export function HomePage() {
 
     try {
       const response = await window.multiAiApi.openProviderLoginPages();
-      setLoginHint(`已重新打开 ${response.opened} 个登录标签页。请完成必要登录，20 秒后可开始提问。`);
-      appendLog("success", `已重新打开 ${response.opened} 个登录标签页。`);
+      setLoginHint(copy.login.reopenSuccess(response.opened));
+      appendLog("success", copy.login.reopenSuccessLog(response.opened));
       scheduleAutoLoginReady();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setLoginHint(`重新打开登录页失败：${message}。请再试一次。`);
-      appendLog("error", `重新打开登录页失败：${message}`);
+      setLoginHint(copy.login.reopenFailed(message));
+      appendLog("error", copy.login.reopenFailedLog(message));
     } finally {
       setLoginOpening(false);
     }
@@ -607,7 +1077,7 @@ export function HomePage() {
 
   function getHistoryTabs(item: SavedTaskHistoryItem): ResultTab[] {
     return [
-      { id: "summary", label: "综合", kind: "summary" },
+      { id: "summary", label: copy.common.summary, kind: "summary" },
       ...item.answers.map((answer) => ({
         id: `provider-${answer.providerId}`,
         label: PROVIDER_LABELS[answer.providerId as ProviderId] ?? answer.providerId,
@@ -634,7 +1104,7 @@ export function HomePage() {
       [item.id]: current[item.id] ?? "summary"
     }));
     setHistoryExpandedId((current) => (current === item.id ? null : item.id));
-    appendLog("info", `已载入历史记录：${item.task.question.slice(0, 40)}`);
+    appendLog("info", copy.logs.historyLoaded(item.task.question.slice(0, 40)));
   }
 
   async function handleDeleteHistoryItem(id: string) {
@@ -649,9 +1119,9 @@ export function HomePage() {
         setResult(null);
         setActiveResultTab("summary");
       }
-      appendLog("success", "历史记录已删除。");
+      appendLog("success", copy.logs.historyDeleted);
     } catch (error) {
-      appendLog("error", `删除历史记录失败：${error instanceof Error ? error.message : String(error)}`);
+      appendLog("error", copy.logs.historyDeleteFailed(error instanceof Error ? error.message : String(error)));
     }
   }
 
@@ -664,9 +1134,9 @@ export function HomePage() {
       setQuestion("");
       setResult(null);
       setActiveResultTab("summary");
-      appendLog("success", "历史记录已清空。");
+      appendLog("success", copy.logs.historyCleared);
     } catch (error) {
-      appendLog("error", `清空历史记录失败：${error instanceof Error ? error.message : String(error)}`);
+      appendLog("error", copy.logs.historyClearFailed(error instanceof Error ? error.message : String(error)));
     }
   }
 
@@ -677,13 +1147,13 @@ export function HomePage() {
       const exportResult = await window.multiAiApi.exportHistoryToText(id);
 
       if (exportResult.canceled) {
-        appendLog("info", "已取消保存文本文件。");
+        appendLog("info", copy.logs.exportCanceled);
         return;
       }
 
-      appendLog("success", `任务已保存到本地文件：${exportResult.path ?? "已完成"}`);
+      appendLog("success", copy.logs.exportSaved(exportResult.path ?? copy.statusLabels.completed));
     } catch (error) {
-      appendLog("error", `保存任务文本失败：${error instanceof Error ? error.message : String(error)}`);
+      appendLog("error", copy.logs.exportFailed(error instanceof Error ? error.message : String(error)));
     } finally {
       setHistoryExportingId(null);
     }
@@ -694,32 +1164,32 @@ export function HomePage() {
   const submitDisabled = running || selectedProviderCount === 0 || !loginReady || !trimmedQuestion;
   const selectedProviderNames =
     selectedProviderIds.length > 0
-      ? selectedProviderIds.map((id) => PROVIDER_LABELS[id as ProviderId] ?? id).join("、")
-      : "未选择平台";
+      ? selectedProviderIds.map((id) => PROVIDER_LABELS[id as ProviderId] ?? id).join(copy.common.listSeparator)
+      : copy.common.noSelectedProvider;
   const selectedProviderSummary =
     selectedProviderIds.length > 0
       ? selectedProviderIds
           .map((id) => PROVIDER_LABELS[id as ProviderId] ?? id)
-          .join(" · ")
-      : "还没有选择平台";
-  const waitingTitle = autoSummarize ? "正在收集回答并生成综合结论" : "正在等待多平台回答返回";
-  const waitingDescription = `问题已发送到 ${selectedProviderCount} 个平台：${selectedProviderNames}。返回结果后会直接展示在下方。`;
+          .join(copy.common.providerListSeparator)
+      : copy.common.selectedProviderFallback;
+  const waitingTitle = autoSummarize ? copy.waiting.titleSummary : copy.waiting.titleCompare;
+  const waitingDescription = copy.waiting.description(selectedProviderCount, selectedProviderNames);
   const waitingTip = autoSummarize
-    ? `全部平台完成后，会优先展示 ${PROVIDER_LABELS[summaryProviderId]} 生成的综合答案。`
-    : "结果返回后，你可以按平台切换查看每一份原始回复。";
+    ? copy.waiting.tipSummary(PROVIDER_LABELS[summaryProviderId])
+    : copy.waiting.tipCompare;
   const summaryModeText = autoSummarize
-    ? `自动总结 · ${PROVIDER_LABELS[summaryProviderId]}`
-    : "仅对比，不自动总结";
-  const autoSaveText = autoSave ? "自动保存到历史" : "仅本次查看，不自动保存";
-  const heroTitle = loadedHistoryItemId ? "继续这个问题" : "你在忙什么？";
+    ? copy.modes.summaryOn(PROVIDER_LABELS[summaryProviderId])
+    : copy.modes.summaryOff;
+  const autoSaveText = autoSave ? copy.modes.autoSaveOn : copy.modes.autoSaveOff;
+  const heroTitle = loadedHistoryItemId ? copy.hero.titleLoaded : copy.hero.titleNew;
   const heroSubtitle = loadedHistoryItemId
-    ? "这条历史任务已经载入，你可以直接再次提问，或在下方继续查看综合结果与各平台回复。"
-    : "左侧统一管理平台、登录、邮件、历史与日志，中间区域只负责提问与查看答案。";
+    ? copy.hero.subtitleLoaded
+    : copy.hero.subtitleNew;
   const heroNotice = !loginReady
-    ? "浏览器登录准备完成后即可运行"
+    ? copy.hero.noticeLogin
     : selectedProviderCount === 0
-      ? "请先在左侧选择至少一个平台"
-      : "准备就绪，可以开始一次多平台提问";
+      ? copy.hero.noticeSelect
+      : copy.hero.noticeReady;
   const heroNoticeClass = `hero-notice${!loginReady || selectedProviderCount === 0 ? " hero-notice-warning" : ""}`;
 
   return (
@@ -733,19 +1203,19 @@ export function HomePage() {
         <div className="app-sidebar-inner">
           <div className="sidebar-brand-row">
             <div className="brand-lockup brand-lockup-sidebar">
-              <img className="brand-logo" src="./branding/duoask-icon.png" alt={`${BRAND.displayName} 标志`} />
+              <img className="brand-logo" src="./branding/duoask-icon.png" alt={copy.brand.logoAlt} />
               <div className="brand-copy">
                 <p className="eyebrow">{BRAND.enName}</p>
-                <h1>{BRAND.displayName}</h1>
-                <p className="brand-subtitle">{BRAND.shortTagline}</p>
+                <h1>{copy.brand.displayName}</h1>
+                <p className="brand-subtitle">{copy.brand.tagline}</p>
               </div>
             </div>
             <button
               className="sidebar-close"
               type="button"
               onClick={() => setSidebarOpen(false)}
-              aria-label="收起侧栏"
-              title="收起侧栏"
+              aria-label={copy.common.collapseSidebar}
+              title={copy.common.collapseSidebar}
             >
               <span className="sidebar-close-icon" aria-hidden="true">
                 <span />
@@ -757,11 +1227,11 @@ export function HomePage() {
           <section className="sidebar-panel sidebar-panel-primary">
             <div className="sidebar-panel-head">
               <div>
-                <p className="eyebrow">本次运行</p>
-                <h2>平台与模式</h2>
+                <p className="eyebrow">{copy.sidebar.runEyebrow}</p>
+                <h2>{copy.sidebar.platformModeTitle}</h2>
               </div>
               <span className={`sidebar-status-badge ${loginReady ? "sidebar-status-badge-ready" : "sidebar-status-badge-waiting"}`}>
-                {loginReady ? "已就绪" : "等待登录"}
+                {loginReady ? copy.common.ready : copy.common.waitingLogin}
               </span>
             </div>
 
@@ -769,8 +1239,8 @@ export function HomePage() {
 
             <div className="sidebar-field">
               <div className="section-title-row">
-                <span>选择平台</span>
-                <span className="muted-text">{selectedProviderCount} 个已选</span>
+                <span>{copy.sidebar.chooseProviders}</span>
+                <span className="muted-text">{copy.common.selectedCount(selectedProviderCount)}</span>
               </div>
               <ProviderSelector
                 providers={providers}
@@ -792,7 +1262,7 @@ export function HomePage() {
                   checked={autoSummarize}
                   onChange={(event) => setAutoSummarize(event.target.checked)}
                 />
-                <span>自动总结所有答案</span>
+                <span>{copy.sidebar.autoSummarize}</span>
               </label>
               <label className="switch-row">
                 <input
@@ -800,12 +1270,12 @@ export function HomePage() {
                   checked={autoSave}
                   onChange={(event) => setAutoSave(event.target.checked)}
                 />
-                <span>自动保存到历史记录</span>
+                <span>{copy.sidebar.autoSave}</span>
               </label>
             </div>
 
             <label className="field-label sidebar-select-field">
-              总结平台
+              {copy.sidebar.summaryProvider}
               <select
                 className="settings-select summary-provider-select"
                 value={summaryProviderId}
@@ -829,27 +1299,27 @@ export function HomePage() {
           <details className="sidebar-panel sidebar-panel-detail" open>
             <summary>
               <span>
-                <span className="eyebrow">连接</span>
-                <strong>登录与会话</strong>
+                <span className="eyebrow">{copy.sidebar.connectionEyebrow}</span>
+                <strong>{copy.sidebar.loginSession}</strong>
               </span>
-              <span className="summary-chevron">展开</span>
+              <span className="summary-chevron">{copy.common.expand}</span>
             </summary>
             <div className="sidebar-panel-body">
               <p className="login-hint">{loginHint}</p>
               <div className="side-actions">
                 <button className="secondary-button" onClick={handleReopenLoginPages} disabled={loginOpening}>
-                  {loginOpening ? "打开中..." : "重新打开登录页"}
+                  {loginOpening ? copy.login.opening : copy.login.reopenButton}
                 </button>
                 <button
                   className="secondary-button"
                   onClick={() => {
                     clearAutoLoginTimer();
                     setLoginReady(true);
-                    setLoginHint("已手动切换为可提问状态。");
-                    appendLog("success", "已手动标记为可提问状态。");
+                    setLoginHint(copy.login.manualReady);
+                    appendLog("success", copy.login.manualReadyLog);
                   }}
                 >
-                  标记为已就绪
+                  {copy.login.markReady}
                 </button>
               </div>
             </div>
@@ -858,16 +1328,16 @@ export function HomePage() {
           <details className="sidebar-panel sidebar-panel-detail">
             <summary>
               <span>
-                <span className="eyebrow">设置</span>
-                <strong>平台测试与邮件</strong>
+                <span className="eyebrow">{copy.sidebar.settingsEyebrow}</span>
+                <strong>{copy.sidebar.providerTestEmail}</strong>
               </span>
-              <span className="summary-chevron">展开</span>
+              <span className="summary-chevron">{copy.common.expand}</span>
             </summary>
             <div className="sidebar-panel-body settings-content">
               <article className="settings-card">
                 <div className="settings-card-header">
-                  <strong>邮件通知</strong>
-                  <span className="pill">{emailSettings.enabled ? "已开启" : "已关闭"}</span>
+                  <strong>{copy.settings.emailNotifications}</strong>
+                  <span className="pill">{emailSettings.enabled ? copy.settings.enabled : copy.settings.disabled}</span>
                 </div>
 
                 <label className="switch-row">
@@ -877,11 +1347,11 @@ export function HomePage() {
                     onChange={(event) => updateEmailSettings({ enabled: event.target.checked })}
                     disabled={!settings}
                   />
-                  <span>任务完成后自动发送邮件</span>
+                  <span>{copy.settings.emailAutoSend}</span>
                 </label>
 
                 <label className="field-label small-label" htmlFor="recipient-email">
-                  接收邮箱
+                  {copy.settings.recipientEmail}
                 </label>
                 <input
                   id="recipient-email"
@@ -894,7 +1364,7 @@ export function HomePage() {
                 />
 
                 <label className="field-label small-label" htmlFor="smtp-user">
-                  SMTP 账号
+                  {copy.settings.smtpUser}
                 </label>
                 <input
                   id="smtp-user"
@@ -906,7 +1376,7 @@ export function HomePage() {
                 />
 
                 <label className="field-label small-label" htmlFor="smtp-pass">
-                  SMTP 密码
+                  {copy.settings.smtpPass}
                 </label>
                 <input
                   id="smtp-pass"
@@ -923,7 +1393,7 @@ export function HomePage() {
                     onClick={() => void saveEmailSettings()}
                     disabled={!settings || savingSettings}
                   >
-                    {savingSettings ? "保存中..." : "保存邮件设置"}
+                    {savingSettings ? copy.settings.saving : copy.settings.saveEmail}
                   </button>
                 </div>
 
@@ -933,7 +1403,7 @@ export function HomePage() {
                   </p>
                 ) : null}
                 <p className="settings-note">
-                  默认读取环境变量中的 SMTP 配置，也可以单独修改收件邮箱并持久保存。
+                  {copy.settings.emailNote}
                 </p>
               </article>
 
@@ -947,7 +1417,7 @@ export function HomePage() {
                     <article className="settings-card" key={provider.id}>
                       <div className="settings-card-header">
                         <strong>{provider.name}</strong>
-                        <span className="pill">浏览器</span>
+                        <span className="pill">{copy.common.browser}</span>
                       </div>
 
                       <div className="settings-actions">
@@ -956,7 +1426,7 @@ export function HomePage() {
                           onClick={() => void testProviderSettings(providerId)}
                           disabled={!settings || isTesting}
                         >
-                          {isTesting ? "测试中..." : "测试"}
+                          {isTesting ? copy.settings.testing : copy.settings.test}
                         </button>
                       </div>
 
@@ -965,43 +1435,43 @@ export function HomePage() {
                           {feedback.message}
                         </p>
                       ) : null}
-                      <p className="settings-note">{PROVIDER_NOTES[providerId]}</p>
+                      <p className="settings-note">{copy.providerNotes[providerId]}</p>
                     </article>
                   );
                 })}
               </div>
-              {savingSettings ? <p className="notice-text">正在保存平台配置...</p> : null}
+              {savingSettings ? <p className="notice-text">{copy.settings.platformSaving}</p> : null}
             </div>
           </details>
 
           <details className="sidebar-panel sidebar-panel-detail">
             <summary>
               <span>
-                <span className="eyebrow">历史</span>
-                <strong>最近任务</strong>
+                <span className="eyebrow">{copy.sidebar.historyEyebrow}</span>
+                <strong>{copy.sidebar.recentTasks}</strong>
               </span>
-              <span className="summary-chevron">展开</span>
+              <span className="summary-chevron">{copy.common.expand}</span>
             </summary>
             <div className="sidebar-panel-body">
               <div className="history-toolbar">
                 <button className="secondary-button log-clear-button" onClick={() => void refreshHistory()} disabled={historyLoading}>
-                  {historyLoading ? "读取中..." : "刷新"}
+                  {historyLoading ? copy.history.loading : copy.history.refresh}
                 </button>
                 <button
                   className="secondary-button log-clear-button"
                   onClick={() => void handleClearHistory()}
                   disabled={historyItems.length === 0}
                 >
-                  清空
+                  {copy.history.clear}
                 </button>
               </div>
               {historyItems.length === 0 ? (
-                <p className="log-empty">暂无历史记录。开启自动保存后，问题、答案和综合结论会保存在这里。</p>
+                <p className="log-empty">{copy.history.empty}</p>
               ) : (
                 <div className="history-list">
                   {historyItems.slice(0, 8).map((item) => {
                     const expanded = historyExpandedId === item.id;
-                    const summary = getPreferredSummary(item);
+                    const summary = getPreferredSummary(item, copy);
 
                     return (
                       <article className="history-item" key={item.id}>
@@ -1009,31 +1479,31 @@ export function HomePage() {
                           <div>
                             <strong>{item.task.question}</strong>
                             <p className="history-meta">
-                              {new Date(item.savedAt).toLocaleString("zh-CN")} · {item.answers.length} 个结果
+                              {new Date(item.savedAt).toLocaleString(copy.locale)} · {copy.common.resultCount(item.answers.length)}
                             </p>
                           </div>
                         </div>
                         <div className="history-actions">
                           <button className="secondary-button log-clear-button" onClick={() => handleViewHistoryItem(item)}>
-                            {expanded ? "收起" : "查看"}
+                            {expanded ? copy.history.collapse : copy.history.view}
                           </button>
                           <button
                             className="secondary-button log-clear-button"
                             onClick={() => void handleExportHistoryItem(item.id)}
                             disabled={historyExportingId === item.id}
                           >
-                            {historyExportingId === item.id ? "保存中..." : "保存"}
+                            {historyExportingId === item.id ? copy.history.exporting : copy.history.save}
                           </button>
                           <button
                             className="secondary-button log-clear-button"
                             onClick={() => void handleDeleteHistoryItem(item.id)}
                           >
-                            删除
+                            {copy.history.delete}
                           </button>
                         </div>
                         {expanded ? (
                           <div className="history-detail">
-                            <div className="result-tabs history-tabs" role="tablist" aria-label="历史任务结果视图">
+                            <div className="result-tabs history-tabs" role="tablist" aria-label={copy.history.tabAria}>
                               {getHistoryTabs(item).map((tab) => {
                                 const isActive = (historyActiveTabs[item.id] ?? "summary") === tab.id;
 
@@ -1061,10 +1531,10 @@ export function HomePage() {
                                 summary ? (
                                   <>
                                     <p className="field-label small-label">{summary.title}</p>
-                                    <pre>{summary.body || "暂无综合内容。"}</pre>
+                                    <pre>{summary.body || copy.answer.emptySummary}</pre>
                                   </>
                                 ) : (
-                                  <p className="log-empty">这条历史任务还没有综合结果。</p>
+                                  <p className="log-empty">{copy.answer.noHistorySummary}</p>
                                 )
                               ) : (
                                 getHistoryTabs(item).map((tab) => {
@@ -1077,7 +1547,7 @@ export function HomePage() {
                                     return null;
                                   }
 
-                                  return <pre key={tab.id}>{formatAnswerBody(answer)}</pre>;
+                                  return <pre key={tab.id}>{formatAnswerBody(answer, copy)}</pre>;
                                 })
                               )}
                             </div>
@@ -1094,10 +1564,10 @@ export function HomePage() {
           <details className="sidebar-panel sidebar-panel-detail">
             <summary>
               <span>
-                <span className="eyebrow">日志</span>
-                <strong>运行日志</strong>
+                <span className="eyebrow">{copy.sidebar.logsEyebrow}</span>
+                <strong>{copy.sidebar.runLogs}</strong>
               </span>
-              <span className="summary-chevron">展开</span>
+              <span className="summary-chevron">{copy.common.expand}</span>
             </summary>
             <div className="sidebar-panel-body">
               <div className="log-panel-header">
@@ -1106,12 +1576,12 @@ export function HomePage() {
                   onClick={() => setLogs([])}
                   disabled={logs.length === 0}
                 >
-                  清空日志
+                  {copy.logsPanel.clear}
                 </button>
               </div>
               <div className="log-list">
                 {logs.length === 0 ? (
-                  <p className="log-empty">这里会显示程序执行状态和关键日志。</p>
+                  <p className="log-empty">{copy.logsPanel.empty}</p>
                 ) : (
                   logs.map((log) => (
                     <div className={`log-entry log-entry-${log.level}`} key={log.id}>
@@ -1134,8 +1604,8 @@ export function HomePage() {
             onClick={() => setSidebarOpen((current) => !current)}
             aria-expanded={sidebarOpen}
             aria-controls="options-sidebar"
-            aria-label={sidebarOpen ? "收起侧栏" : "展开侧栏"}
-            title={sidebarOpen ? "收起侧栏" : "展开侧栏"}
+            aria-label={sidebarOpen ? copy.common.collapseSidebar : copy.common.expandSidebar}
+            title={sidebarOpen ? copy.common.collapseSidebar : copy.common.expandSidebar}
           >
             <span className="sidebar-toggle-icon" aria-hidden="true">
               <span />
@@ -1143,9 +1613,25 @@ export function HomePage() {
               <span />
             </span>
           </button>
-          <div className="main-toolbar-meta">
-            <span className="toolbar-chip">{selectedProviderCount} 个平台</span>
-            <span className="toolbar-chip">{loginReady ? "可提问" : "等待登录"}</span>
+          <div className="main-toolbar-actions">
+            <div className="language-switch" role="group" aria-label={copy.languageSwitchAria}>
+              <span className="language-switch-label">{copy.languageLabel}</span>
+              {(["zh", "en"] as const).map((option) => (
+                <button
+                  key={option}
+                  className={`language-option${language === option ? " language-option-active" : ""}`}
+                  type="button"
+                  aria-pressed={language === option}
+                  onClick={() => handleLanguageChange(option)}
+                >
+                  {copy.languages[option]}
+                </button>
+              ))}
+            </div>
+            <div className="main-toolbar-meta">
+              <span className="toolbar-chip">{copy.common.providerCount(selectedProviderCount)}</span>
+              <span className="toolbar-chip">{loginReady ? copy.common.canAsk : copy.common.waitingLogin}</span>
+            </div>
           </div>
         </header>
 
@@ -1167,11 +1653,11 @@ export function HomePage() {
                 setQuestion(event.target.value);
               }}
               rows={2}
-              placeholder="有问题，尽管问"
+              placeholder={copy.hero.placeholder}
             />
             <div className="hero-composer-actions">
               <span className={`hero-composer-hint${running ? " hero-composer-hint-busy" : ""}`}>
-                {running ? "正在处理中" : `${selectedProviderCount} 平台`}
+                {running ? copy.hero.runningHint : copy.common.providerCount(selectedProviderCount)}
               </span>
               <button
                 className="hero-submit"
@@ -1181,10 +1667,10 @@ export function HomePage() {
                 {running ? (
                   <span className="hero-submit-busy">
                     <span className="hero-submit-spinner" aria-hidden="true" />
-                    处理中
+                    {copy.common.processing}
                   </span>
                 ) : (
-                  "提问"
+                  copy.hero.ask
                 )}
               </button>
             </div>
@@ -1194,7 +1680,7 @@ export function HomePage() {
             <span className="hero-pill">{summaryModeText}</span>
             <span className="hero-pill">{autoSaveText}</span>
             <span className={`hero-pill ${loginReady ? "hero-pill-ready" : "hero-pill-waiting"}`}>
-              {loginReady ? "浏览器会话已就绪" : "浏览器登录准备中"}
+              {loginReady ? copy.hero.sessionReady : copy.hero.sessionPreparing}
             </span>
           </div>
 
@@ -1204,22 +1690,23 @@ export function HomePage() {
         {result ? (
           <section className="results-stack">
             <TaskProgress
-              title={`任务状态：${statusLabel(result.task.status)}`}
-              description={resultSummary || `已返回 ${result.answers.length} 个结果，成功 ${completedCount} 个，失败 ${failedCount} 个`}
+              title={copy.result.taskStatus(statusLabel(result.task.status, copy))}
+              description={resultSummary || copy.result.fallbackSummary(result.answers.length, completedCount, failedCount)}
             />
             {verificationRequiredProviders.length > 0 ? (
               <section className="panel warning-panel">
-                <p className="eyebrow">需要人工验证</p>
+                <p className="eyebrow">{copy.result.manualVerification}</p>
                 <p className="notice-text">
-                  {verificationRequiredProviders
-                    .map((answer) => PROVIDER_LABELS[answer.providerId as ProviderId] ?? answer.providerId)
-                    .join("、")}
-                  需要先到浏览器中完成验证，然后重新运行任务。
+                  {copy.result.manualVerificationMessage(
+                    verificationRequiredProviders
+                      .map((answer) => PROVIDER_LABELS[answer.providerId as ProviderId] ?? answer.providerId)
+                      .join(copy.common.listSeparator)
+                  )}
                 </p>
               </section>
             ) : null}
             <section className="result-panel">
-              <div className="result-tabs" role="tablist" aria-label="结果视图">
+              <div className="result-tabs" role="tablist" aria-label={copy.result.tabsAria}>
                 {resultTabs.map((tab) => {
                   const isActive = activeResultTab === tab.id;
 
@@ -1240,25 +1727,30 @@ export function HomePage() {
               <div className="result-tab-panel">
                 {activeResultTab === "summary" ? (
                   (() => {
-                    const summary = getPreferredSummary(result);
+                    const summary = getPreferredSummary(result, copy);
 
                     if (!result.autoSummary && result.synthesis) {
-                      return result.synthesis ? <SynthesisPanel synthesis={result.synthesis} /> : null;
+                      return result.synthesis ? <SynthesisPanel synthesis={result.synthesis} label={copy.summary.answerTitle} /> : null;
                     }
 
                     if (summary) {
                       return (
                         <div className="auto-summary-result">
-                          <AnswerCard title={summary.title} status={summary.status} body={summary.body} />
+                          <AnswerCard
+                            title={summary.title}
+                            status={summary.status}
+                            statusText={statusLabel(summary.status, copy)}
+                            body={summary.body}
+                          />
                         </div>
                       );
                     }
 
                     return (
                       <div className="empty-tab-panel">
-                        <p className="eyebrow">综合</p>
-                        <h3>还没有综合结果</h3>
-                        <p>运行完成后，这里会优先展示总结后的答案。</p>
+                        <p className="eyebrow">{copy.common.summary}</p>
+                        <h3>{copy.result.emptySummaryTitle}</h3>
+                        <p>{copy.result.emptySummaryDescription}</p>
                       </div>
                     );
                   })()
@@ -1277,7 +1769,8 @@ export function HomePage() {
                         key={answer.providerId}
                         title={provider?.name ?? PROVIDER_LABELS[providerId] ?? answer.providerId}
                         status={answer.status}
-                        body={formatAnswerBody(answer)}
+                        statusText={statusLabel(answer.status, copy)}
+                        body={formatAnswerBody(answer, copy)}
                       />
                     );
                   })
@@ -1289,7 +1782,7 @@ export function HomePage() {
           <section className="results-stack" aria-live="polite">
             <section className="panel waiting-panel">
               <div className="waiting-panel-copy">
-                <p className="eyebrow">处理中</p>
+                <p className="eyebrow">{copy.common.processing}</p>
                 <h3>{waitingTitle}</h3>
                 <p>{waitingDescription}</p>
                 <p className="waiting-panel-note">{waitingTip}</p>
@@ -1298,9 +1791,11 @@ export function HomePage() {
                 <div className="waiting-progress-header">
                   <span className="waiting-spinner" aria-hidden="true" />
                   <span className="waiting-elapsed">
-                    已等待 {elapsedSeconds < 60
-                      ? `${elapsedSeconds}s`
-                      : `${Math.floor(elapsedSeconds / 60)}m${elapsedSeconds % 60}s`}
+                    {copy.common.elapsed(
+                      elapsedSeconds < 60
+                        ? `${elapsedSeconds}s`
+                        : `${Math.floor(elapsedSeconds / 60)}m${elapsedSeconds % 60}s`
+                    )}
                   </span>
                 </div>
                 <div className="waiting-provider-list">
@@ -1308,9 +1803,9 @@ export function HomePage() {
                     const phase = providerProgress[id] ?? "sent";
                     const label = PROVIDER_LABELS[id as ProviderId] ?? id;
                     const phaseInfo = {
-                      sent:     { icon: "📤", text: "已发送",   cls: "phase-sent" },
-                      fetching: { icon: "⚡", text: "正在获取", cls: "phase-fetching" },
-                      waiting:  { icon: "⏳", text: "等待回复", cls: "phase-waiting" }
+                      sent:     { icon: "📤", text: copy.waiting.sent, cls: "phase-sent" },
+                      fetching: { icon: "⚡", text: copy.waiting.fetching, cls: "phase-fetching" },
+                      waiting:  { icon: "⏳", text: copy.waiting.waiting, cls: "phase-waiting" }
                     }[phase];
                     return (
                       <div key={id} className={`waiting-provider-row ${phaseInfo.cls}`}>
@@ -1326,8 +1821,10 @@ export function HomePage() {
                   {autoSummarize ? (
                     <div className="waiting-provider-row phase-pending">
                       <span className="waiting-provider-icon">🧠</span>
-                      <span className="waiting-provider-name">{PROVIDER_LABELS[summaryProviderId]} 总结</span>
-                      <span className="waiting-provider-phase">全部完成后执行</span>
+                      <span className="waiting-provider-name">
+                        {PROVIDER_LABELS[summaryProviderId]} {copy.waiting.summarySuffix}
+                      </span>
+                      <span className="waiting-provider-phase">{copy.waiting.pending}</span>
                     </div>
                   ) : null}
                 </div>
@@ -1336,9 +1833,9 @@ export function HomePage() {
           </section>
         ) : (
           <section className="empty-results empty-results-quiet">
-            <p className="eyebrow">结果</p>
-            <h2>答案会在这里聚合</h2>
-            <p>提问后会先展示综合答案，再按平台切换查看原始回复。</p>
+            <p className="eyebrow">{copy.common.result}</p>
+            <h2>{copy.result.emptyTitle}</h2>
+            <p>{copy.result.emptyDescription}</p>
           </section>
         )}
       </main>

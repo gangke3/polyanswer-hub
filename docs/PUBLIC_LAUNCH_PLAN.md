@@ -6,7 +6,7 @@ This checklist focuses on improving first impressions, trust, and contributor co
 
 - Rename or align the repository with the product name, ideally `duoask`, `duoask-desktop`, or `duoask-ai`.
 - Confirm `npm run release:check` passes.
-- Confirm the README screenshots and `docs/assets/duoask-demo.gif` show the current UI.
+- Confirm the README screenshots show the current bilingual UI and were generated with mock data.
 - Add `docs/assets/duoask-social-preview.png` as the GitHub social preview image.
 - Create the first GitHub release notes from `docs/PREPARE_RELEASE.md`.
 - Enable GitHub Security Advisories, Dependabot alerts, dependency graph, and secret scanning.
@@ -29,7 +29,7 @@ Best first release:
 
 - Windows installer or portable zip generated with `npm run package:win:portable`
 - short release notes
-- one screenshot
+- Chinese and English screenshots
 - known limitations
 - hash for downloaded artifacts if packaging is manual
 
@@ -46,6 +46,7 @@ Create a few issues with `good first issue` or `help wanted` labels:
 - Improve provider status documentation.
 - Add a mock provider mode for trying the UI without real provider accounts.
 - Remove legacy `POLYANSWER_API_*` compatibility after a deprecation window.
+- Move UI copy into smaller locale files once the localized renderer grows.
 
 ## Launch Copy
 
@@ -58,7 +59,7 @@ I built DuoAsk, a local-first Windows desktop app that sends one prompt to ChatG
 Short Chinese version:
 
 ```text
-我做了一个本地优先的 Windows 桌面应用 DuoAsk：一个问题同时问 ChatGPT、Claude、Gemini、Kimi、豆包和 Grok，并排比较回答，再综合生成最终答案。登录和验证都走可见浏览器流程，会话与历史保存在本机。
+我做了一个本地优先的 Windows 桌面应用 DuoAsk：一个问题同时问 ChatGPT、Claude、Gemini、Kimi、豆包和 Grok，并排比较回答，再综合生成最终答案。界面支持中文和 English；登录和验证都走可见浏览器流程，会话与历史保存在本机。
 ```
 
 ## After Launch

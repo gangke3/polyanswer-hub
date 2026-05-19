@@ -19,7 +19,7 @@ Usually include:
 - project metadata such as `README.md`, `LICENSE`, `package.json`, and `package-lock.json`
 - GitHub files under `.github/`
 - branding assets under `apps/desktop/electron/renderer/public/branding/`
-- README screenshots under `docs/assets/`
+- README screenshots under `docs/assets/` generated with mock data
 
 Usually exclude:
 
@@ -65,10 +65,11 @@ Before publishing, confirm the README matches current behavior:
 - supported provider list
 - Windows-only status
 - local API endpoints
-- README demo GIF and screenshots
+- README screenshots and language-switch behavior
 - manual-login limitation
 - MVP-stage caveats
 - no promise of CAPTCHA, login, usage-limit, or provider-term bypass
+- no real prompts, account names, cookies, local history, or provider answers in screenshots
 
 ## 5. Suggested GitHub Settings
 
@@ -84,37 +85,36 @@ Topics:
 electron, react, typescript, ai, llm, chatgpt, claude, gemini, grok, playwright, desktop-app, local-first
 ```
 
-Recommended first release title:
+Recommended multilingual release title:
 
 ```text
-DuoAsk v0.1.0 MVP
+DuoAsk v0.2.0 Multilingual UI
 ```
 
 Recommended release notes:
 
 ```text
-Initial MVP release of DuoAsk, a local-first Windows desktop app for asking one prompt across multiple AI providers, comparing raw answers, saving local history, and generating a synthesized response.
+DuoAsk v0.2.0 adds a bilingual 中文 / English interface and refreshes the public README with clean mock-data screenshots.
 
 Highlights:
-- Electron + React + TypeScript desktop app
+- 中文 / English interface switch in the main toolbar
+- Local language preference stored on the user's machine
+- Localized sidebar, task status, result tabs, history, logs, and settings copy
+- README refreshed with bilingual setup instructions
+- New README screenshots generated from mock data with no real prompts, accounts, cookies, or chat history
 - Windows portable zip release asset
-- Browser-based provider adapters for ChatGPT, Claude, Gemini, Kimi, Doubao, and Grok
-- User-assisted login and local browser session reuse
-- Local HTTP API on 127.0.0.1:3719
-- Local history and text export
-- MIT license
 
 Known limitations:
 - Provider automation is experimental and can break when provider web UIs change
 - Windows is the current target platform
-- Installer packaging is still planned; the first release uses a portable zip
+- Installer packaging is still planned; releases currently use a portable zip
 ```
 
 ## 6. After Publishing
 
 - Add screenshots to the GitHub repository social preview.
 - Use `docs/assets/duoask-social-preview.png` as the first social preview image.
-- Keep `docs/assets/duoask-demo.gif` pinned in the README.
+- Keep README screenshots current and regenerate them with mock data before major UI releases.
 - Open a few starter issues for good first contributions.
 - Enable GitHub Security Advisories if available.
 - Watch CI on the first public push.
