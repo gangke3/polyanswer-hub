@@ -314,34 +314,45 @@ export class BrowserManager {
     let browserContext = await this.ensureSharedContext(true);
 
     try {
-      for (const session of BrowserManager.sessions.values()) {
-        if (!session.page.isClosed()) {
-          await session.page.close().catch(() => undefined);
-        }
-      }
       BrowserManager.sessions.clear();
 
-      const existingPages = browserContext.pages().filter((page) => !page.isClosed());
-      for (const page of existingPages) {
-        await page.close().catch(() => undefined);
-      }
-
-      const primaryPage = await browserContext.newPage();
       const sessions: ActiveBrowserSession[] = [];
       const navigations: Promise<void>[] = [];
 
-      for (let index = 0; index < providerIds.length; index += 1) {
-        const providerId = providerIds[index];
+      for (const providerId of providerIds) {
         const provider = this.getProviderMeta(providerId);
-        const page = index === 0 ? primaryPage : await browserContext.newPage();
+        let page = this.findReusablePage(browserContext, providerId);
+        let needsNavigation = false;
+
+        if (!page) {
+          page = await browserContext.newPage();
+          needsNavigation = true;
+        } else if (!this.isProviderPage(page, providerId)) {
+          needsNavigation = true;
+        }
+
         const session = this.createSession(providerId, browserContext, page, true);
         sessions.push(session);
-        navigations.push(this.navigateToLoginPage(page, provider.loginUrl));
+
+        if (needsNavigation) {
+          navigations.push(this.navigateToLoginPage(page, provider.loginUrl));
+        }
       }
 
       await Promise.all(navigations);
 
-      await primaryPage.bringToFront();
+      const claimedPages = new Set(sessions.map((s) => s.page));
+      for (const page of browserContext.pages()) {
+        if (!page.isClosed() && !claimedPages.has(page)) {
+          await page.close().catch(() => undefined);
+        }
+      }
+
+      const firstPage = sessions[0]?.page;
+      if (firstPage) {
+        await firstPage.bringToFront();
+      }
+
       return sessions;
     } catch (error) {
       await this.closeAll();
