@@ -34,10 +34,10 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.15.18",
-    "eslint": "^10.4.0",
+    "eslint": "^10.4.1",
     "globals": "^17.6.0",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.59.3"
+    "typescript-eslint": "^8.60.0"
   },
   "scripts": {
     "build": "npm run build -ws --if-present",
