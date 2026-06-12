@@ -3,6 +3,39 @@ export interface ResultCardViewModel {
   body: string;
 }
 
+interface TaskSavePayload {
+  question: string;
+  createdAt: string;
+  finishedAt?: string;
+  status: string;
+  providerIds: string[];
+  answers: Array<{
+    providerId: string;
+    status: string;
+    answerText?: string;
+    errorMessage?: string;
+  }>;
+  synthesis?: { finalAnswer: string };
+  autoSummary?: {
+    providerId: string;
+    status: string;
+    answerText?: string;
+    errorMessage?: string;
+  };
+}
+
+interface ResummarizePayload {
+  question: string;
+  answers: Array<{
+    providerId: string;
+    status: string;
+    answerText?: string;
+    errorMessage?: string;
+  }>;
+  summaryProviderId: string;
+  timeoutMs?: number;
+}
+
 declare global {
   interface Window {
     multiAiApi: {
@@ -25,6 +58,18 @@ declare global {
       createTask: (
         input: import("@multi-ai/shared").CreateTaskInput
       ) => Promise<import("@multi-ai/orchestrator").TaskExecutionResult>;
+      saveAllAnswers: (
+        payload: { data: TaskSavePayload; format: "txt" | "md" }
+      ) => Promise<{ canceled: boolean; path?: string }>;
+      exportPdfTask: (
+        payload: TaskSavePayload
+      ) => Promise<{ canceled: boolean; path?: string }>;
+      exportPdfContent: (
+        payload: { title: string; body: string }
+      ) => Promise<{ canceled: boolean; path?: string }>;
+      resummarize: (
+        payload: ResummarizePayload
+      ) => Promise<import("@multi-ai/shared").ProviderRunResult>;
     };
   }
 }

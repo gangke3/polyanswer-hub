@@ -172,10 +172,16 @@ export class TaskOrchestrator {
   }
 
   private createSummaryPrompt(question: string, answers: ProviderRunResult[]): string {
+    // 每篇答案最大 3000 字符，防止总 prompt 超过 LLM 上下文窗口
+    const MAX_PER_ANSWER = 3000;
+
     const answerBlocks = answers
       .map((item, index) => {
         const label = item.providerId;
-        const text = item.answer?.answerText?.trim() ?? "";
+        const fullText = item.answer?.answerText?.trim() ?? "";
+        const text = fullText.length > MAX_PER_ANSWER
+          ? fullText.slice(0, MAX_PER_ANSWER) + "\n...[截断，原文太长]"
+          : fullText;
         return `## Answer ${index + 1}: ${label}\n${text}`;
       })
       .join("\n\n");

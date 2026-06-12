@@ -5,7 +5,7 @@ export class RuleBasedSynthesizer {
     const completed = results.filter((result) => result.answer);
     const summaries = completed.map((result) => ({
       providerId: result.providerId,
-      summary: result.answer?.answerText.slice(0, 240) ?? ""
+      summary: result.answer?.answerText ?? ""
     }));
 
     return {

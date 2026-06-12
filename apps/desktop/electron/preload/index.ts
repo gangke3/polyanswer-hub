@@ -15,7 +15,15 @@ const api = {
   deleteHistory: (id: string) => ipcRenderer.invoke("history:delete", id),
   clearHistory: () => ipcRenderer.invoke("history:clear"),
   exportHistoryToText: (id: string) => ipcRenderer.invoke("history:export-text", id),
-  createTask: (input: unknown) => ipcRenderer.invoke("task:create", input)
+  createTask: (input: unknown) => ipcRenderer.invoke("task:create", input),
+  saveAllAnswers: (payload: { data: unknown; format: "txt" | "md" }) =>
+    ipcRenderer.invoke("task:save-all", payload),
+  exportPdfTask: (payload: unknown) =>
+    ipcRenderer.invoke("export:pdf-task", payload),
+  exportPdfContent: (payload: { title: string; body: string }) =>
+    ipcRenderer.invoke("export:pdf-content", payload),
+  resummarize: (payload: unknown) =>
+    ipcRenderer.invoke("task:resummarize", payload)
 };
 
 contextBridge.exposeInMainWorld("multiAiApi", api);

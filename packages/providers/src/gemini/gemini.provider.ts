@@ -138,6 +138,30 @@ export class GeminiProvider extends AbstractProviderAdapter {
 
         if (Date.now() - lastChangeAt >= this.quietPeriodMs) {
           await sleep(this.finalDomSettleMs);
+          // ---- 完成后二次读取：等待额外 500ms 后重新获取答案 ----
+          await sleep(500);
+          const recheckAnswer = await this.readLatestAnswerState(ctx);
+          if (recheckAnswer.answerText && recheckAnswer.answerText !== previousText) {
+            previousText = recheckAnswer.answerText;
+            lastChangeAt = Date.now();
+            // 继续等待直到再次稳定
+            while (Date.now() < deadline) {
+              await sleep(200);
+              const nextAnswer = await this.readLatestAnswerState(ctx);
+              if (nextAnswer.answerText !== previousText) {
+                previousText = nextAnswer.answerText;
+                lastChangeAt = Date.now();
+              }
+              if (await this.isStillGenerating(ctx)) {
+                await sleep(200);
+                continue;
+              }
+              if (Date.now() - lastChangeAt >= this.quietPeriodMs) {
+                await sleep(this.finalDomSettleMs);
+                return;
+              }
+            }
+          }
           return;
         }
 

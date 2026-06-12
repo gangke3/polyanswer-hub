@@ -120,6 +120,78 @@ export function formatTaskResultText(input: {
   return [...header, ...summarySection, ...providerSections].join("\n");
 }
 
+export function formatTaskResultMarkdown(input: {
+  task: TaskRecord;
+  answers: ProviderRunResult[];
+  synthesis?: SynthesisResult;
+  autoSummary?: ProviderRunResult;
+  savedAt?: string;
+}): string {
+  const lines: string[] = [];
+  lines.push(`# ${BRAND.taskRecordTitle}`);
+  lines.push("");
+  lines.push(`**问题：** ${input.task.question}`);
+  lines.push("");
+  lines.push(`| 字段 | 值 |`);
+  lines.push(`| --- | --- |`);
+  lines.push(`| 创建时间 | ${input.task.createdAt} |`);
+  lines.push(`| 完成时间 | ${input.task.finishedAt ?? "未完成"} |`);
+  if (input.savedAt) lines.push(`| 保存时间 | ${input.savedAt} |`);
+  lines.push(`| 任务状态 | ${statusLabel(input.task.status)} |`);
+
+  const completed = input.answers.filter((a) => a.status === "completed");
+  const failed = input.answers.filter((a) => a.status !== "completed");
+  lines.push(`| 返回结果 | ${input.answers.length} 个 |`);
+  lines.push(`| 成功平台 | ${completed.length} 个（${formatProviderList(completed)}） |`);
+  lines.push(`| 失败平台 | ${failed.length} 个（${formatProviderList(failed)}） |`);
+  lines.push(`| 平台 | ${input.task.providerIds.map((id) => providerName(id)).join("、")} |`);
+  lines.push("");
+
+  // Synthesis / auto-summary
+  if (input.autoSummary) {
+    const name = PROVIDER_LABELS[input.autoSummary.providerId] ?? input.autoSummary.providerId;
+    lines.push(`## 综合答案 - ${name}`);
+    lines.push("");
+    lines.push(formatAnswerBody(input.autoSummary));
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+  } else if (input.synthesis) {
+    lines.push("## 综合结论");
+    lines.push("");
+    lines.push(input.synthesis.finalAnswer);
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+  }
+
+  // Per-provider sections
+  for (let i = 0; i < input.answers.length; i++) {
+    const answer = input.answers[i];
+    const name = providerName(answer.providerId);
+    lines.push(`## 平台 ${i + 1}：${name}`);
+    lines.push("");
+    lines.push(`**状态：** ${statusLabel(answer.status)}`);
+    lines.push("");
+    lines.push(formatAnswerBody(answer));
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+export function formatHistoryItemMarkdown(item: SavedTaskHistoryItem): string {
+  return formatTaskResultMarkdown({
+    task: item.task,
+    answers: item.answers,
+    synthesis: item.synthesis,
+    autoSummary: item.autoSummary,
+    savedAt: item.savedAt
+  });
+}
+
 export function formatHistoryItemText(item: SavedTaskHistoryItem): string {
   return formatTaskResultText({
     task: item.task,
@@ -130,7 +202,7 @@ export function formatHistoryItemText(item: SavedTaskHistoryItem): string {
   });
 }
 
-export function createSuggestedTaskFileName(question: string, savedAt?: string): string {
+export function createSuggestedTaskFileName(question: string, savedAt?: string, ext = "txt"): string {
   const timestampSource = savedAt ? new Date(savedAt) : new Date();
   const timestamp = [
     timestampSource.getFullYear(),
@@ -149,5 +221,5 @@ export function createSuggestedTaskFileName(question: string, savedAt?: string):
     .trim()
     .slice(0, 36);
 
-  return `${safeQuestion || "task"}-${timestamp}.txt`;
+  return `${safeQuestion || "task"}-${timestamp}.${ext}`;
 }

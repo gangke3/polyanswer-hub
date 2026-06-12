@@ -79,11 +79,7 @@ export class ClaudeProvider extends AbstractProviderAdapter {
     await session.page.keyboard.press("Meta+A").catch(() => undefined);
     await session.page.keyboard.press("Backspace").catch(() => undefined);
 
-    try {
-      await input.fill(prompt);
-    } catch {
-      await session.page.keyboard.insertText(prompt);
-    }
+    await this.fillLongText(input, session.page, prompt);
 
     await sleep(300);
 
@@ -143,6 +139,30 @@ export class ClaudeProvider extends AbstractProviderAdapter {
 
       if (Date.now() - lastChangeAt >= this.quietPeriodMs) {
         await sleep(this.finalDomSettleMs);
+        // ---- 完成后二次读取：等待额外 500ms 后重新获取答案 ----
+        await sleep(500);
+        const recheckText = await this.readLatestAnswerText(ctx);
+        if (recheckText && recheckText !== previousText) {
+          previousText = recheckText;
+          lastChangeAt = Date.now();
+          // 继续等待直到再次稳定
+          while (Date.now() < deadline) {
+            await sleep(200);
+            const nextText = await this.readLatestAnswerText(ctx);
+            if (nextText !== previousText) {
+              previousText = nextText;
+              lastChangeAt = Date.now();
+            }
+            if (await this.isStillGenerating(ctx)) {
+              await sleep(200);
+              continue;
+            }
+            if (Date.now() - lastChangeAt >= this.quietPeriodMs) {
+              await sleep(this.finalDomSettleMs);
+              return;
+            }
+          }
+        }
         return;
       }
 
@@ -252,13 +272,37 @@ export class ClaudeProvider extends AbstractProviderAdapter {
       "Try again",
       "Regenerate"
     ]);
-    const lines = text
+    let lines = text
       .split("\n")
       .map((line) => line.trimEnd())
       .filter(Boolean);
 
+    // 移除末尾部 UI 行
     while (lines.length > 0 && uiOnlyLines.has(lines[lines.length - 1])) {
       lines.pop();
+    }
+
+    // 移除 "Claude responded:" 前缀行
+    while (lines.length > 0) {
+      const firstLine = lines[0].trim();
+      if (
+        firstLine.startsWith("Claude responded:") ||
+        firstLine === "Claude" ||
+        firstLine === "Claude responded"
+      ) {
+        lines.shift();
+      } else {
+        break;
+      }
+    }
+
+    // 去除开头重复段落（Claude 有时在 DOM 中重复同一段文字两次）
+    if (lines.length >= 2) {
+      const firstLine = lines[0].trim();
+      const secondLine = lines[1].trim();
+      if (firstLine.length > 10 && firstLine === secondLine) {
+        lines = lines.slice(1);
+      }
     }
 
     return lines.join("\n").trim();

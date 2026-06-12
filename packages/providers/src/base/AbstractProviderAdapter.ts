@@ -12,6 +12,7 @@ import type { ProviderContext } from "./ProviderContext.js";
 import type { ProviderSelectors } from "./selector.types.js";
 import { normalizeAnswerText } from "../shared/extraction.js";
 import { sleep } from "../shared/timing.js";
+import { isAnswerIncomplete as checkIncomplete } from "../shared/answerValidator.js";
 
 export abstract class AbstractProviderAdapter implements ProviderAdapter {
   constructor(
@@ -149,14 +150,7 @@ export abstract class AbstractProviderAdapter implements ProviderAdapter {
     }
 
     await input.click({ force: true }).catch(() => undefined);
-    try {
-      await input.fill(prompt);
-    } catch {
-      await input.press("Control+A").catch(() => undefined);
-      await input.press("Meta+A").catch(() => undefined);
-      await input.press("Backspace").catch(() => undefined);
-      await session.page.keyboard.type(prompt, { delay: 10 });
-    }
+    await this.fillLongText(input, session.page, prompt);
 
     const sendButton = await firstVisibleLocator(session.page, selectors.submitButtonCandidates, 5000);
 
@@ -200,8 +194,46 @@ export abstract class AbstractProviderAdapter implements ProviderAdapter {
         stableIterations = 0;
       }
 
-      // 1 次稳定即可，不再额外等 800ms
-      if (stableIterations >= 1) {
+      // 需要至少 2 次连续稳定（800ms）才认为完成，避免 LLM 段落间自然停顿触发误判
+      if (stableIterations >= 2) {
+        // ---- 完成后二次读取：等待额外 DOM 变化并重新获取 ----
+        await sleep(500);
+        const finalText = normalizeAnswerText(
+          await session.page
+            .locator(selectors.answerContainerCandidates.join(", "))
+            .last()
+            .innerText()
+            .catch(() => "")
+        );
+
+        if (finalText && finalText !== previousText) {
+          // 内容仍在变化，继续等待直到再次稳定
+          previousText = finalText;
+          stableIterations = 0;
+
+          while (Date.now() < deadline) {
+            await sleep(400);
+            const recheckText = normalizeAnswerText(
+              await session.page
+                .locator(selectors.answerContainerCandidates.join(", "))
+                .last()
+                .innerText()
+                .catch(() => "")
+            );
+
+            if (recheckText === previousText) {
+              stableIterations += 1;
+            } else {
+              previousText = recheckText;
+              stableIterations = 0;
+            }
+
+            if (stableIterations >= 2) {
+              return;
+            }
+          }
+        }
+
         return;
       }
 
@@ -223,6 +255,77 @@ export abstract class AbstractProviderAdapter implements ProviderAdapter {
     const session = this.getSession(ctx);
     const outputDir = path.resolve(process.cwd(), "data", "snapshots", ctx.providerId);
     return captureSnapshot(session.page, outputDir, prefix);
+  }
+
+  /**
+   * 向输入框填入长文本的健壮方法。
+   * 优先使用 evaluate 直接设置 DOM 值（绕过 React/Vue 等框架的受控组件限制），
+   * 失败时依次回退到 fill() → keyboard.insertText()。
+   *
+   * 适用于综合总结等需要输入超长提示词的场景。
+   */
+  protected async fillLongText(
+    input: import("playwright").Locator,
+    page: import("playwright").Page,
+    text: string
+  ): Promise<void> {
+    // 策略 1：用 evaluate 直接设置 value / textContent，并触发 input + change 事件
+    const evaluateOk = await page.evaluate(
+      (args) => {
+        const { selector, text } = args;
+        const el = document.querySelector(selector) as HTMLElement | null;
+        if (!el) return false;
+
+        el.focus();
+
+        if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
+          // 使用 native setter 绕过 React 受控组件
+          const nativeSetter = Object.getOwnPropertyDescriptor(
+            el.constructor.prototype, "value"
+          )?.set;
+          if (nativeSetter) {
+            nativeSetter.call(el, text);
+          } else {
+            el.value = text;
+          }
+        } else {
+          // contenteditable 元素
+          el.textContent = text;
+        }
+
+        el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      },
+      { selector: await input.evaluate((el) => {
+        // 构建一个足够精确的选择器
+        if (el.id) return `#${el.id}`;
+        const tag = el.tagName.toLowerCase();
+        const cls = el.className && typeof el.className === "string"
+          ? "." + el.className.trim().split(/\s+/).slice(0, 2).join(".")
+          : "";
+        return `${tag}${cls}`;
+      }), text }
+    ).catch(() => false);
+
+    if (evaluateOk) {
+      // 验证输入框是否确实包含文本
+      const currentVal = await input.inputValue().catch(() => "")
+        || await input.innerText().catch(() => "");
+      if (currentVal.length >= text.length * 0.9) {
+        return; // 成功
+      }
+    }
+
+    // 策略 2：Playwright fill()
+    const fillOk = await input.fill(text).then(() => true).catch(() => false);
+    if (fillOk) return;
+
+    // 策略 3：keyboard.insertText（对 contenteditable 更可靠，但长文本较慢）
+    await input.click({ force: true }).catch(() => undefined);
+    await page.keyboard.press("Control+A").catch(() => undefined);
+    await page.keyboard.press("Backspace").catch(() => undefined);
+    await page.keyboard.insertText(text);
   }
 
   async extractAnswer(ctx: ProviderContext, prompt: string): Promise<ProviderAnswer> {
@@ -259,5 +362,13 @@ export abstract class AbstractProviderAdapter implements ProviderAdapter {
       screenshotPath: artifacts.screenshotPath,
       createdAt: nowIso()
     };
+  }
+
+  /**
+   * 判断提取到的答案是否不完整（过短或包含截断标记）。
+   * 子类可覆盖以添加平台特有的检测逻辑。
+   */
+  isAnswerIncomplete(answerText: string): boolean {
+    return checkIncomplete(answerText);
   }
 }

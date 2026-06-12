@@ -5,14 +5,15 @@ export const doubaoSelectors: ProviderSelectors = {
   submitButtonCandidates: [
     "button[class*='send-msg-btn']",
     "button[class*='send']",
+    "button[id*='send']",
     "button[type='submit']"
   ],
   answerContainerCandidates: [
+    "[data-copy-telemetry='right_click_copy'] .flow-markdown-body",
     ".flow-markdown-body",
-    ".markdown",
-    ".message-content",
-    "[class*='message']",
-    ".v_list_row .select-none"
+    "[data-plugin-identifier*='block_type:10000'] .flow-markdown-body",
+    "[data-container-type*='block'] .flow-markdown-body",
+    "[data-render-engine='node'] > div"
   ],
   loggedOutMarkers: ["text=登录以解锁更多功能", "text=抖音一键登录", "text=完成验证后继续"],
   loggedInMarkers: ["textarea", "[contenteditable='true']"]

@@ -19,6 +19,19 @@ export class ChatGPTProvider extends AbstractProviderAdapter {
     const session = this.getSession(ctx);
     await session.page.goto(this.homepage, { waitUntil: "domcontentloaded" });
     await waitForNetworkSettled(session.page);
+
+    // 检测登录弹窗覆盖层
+    const loginModal = await session.page.locator("#modal-no-auth-login, [data-testid='modal-no-auth-login']").first().isVisible().catch(() => false);
+    if (loginModal) {
+      // 尝试自动关闭弹窗
+      await this.dismissLoginModal(session.page);
+      // 关闭后重新检查
+      const modalStillThere = await session.page.locator("#modal-no-auth-login, [data-testid='modal-no-auth-login']").first().isVisible().catch(() => false);
+      if (modalStillThere) {
+        return false;
+      }
+    }
+
     const bodyText = await session.page.locator("body").innerText().catch(() => "");
 
     if (bodyText.includes("登录以获取基于已保存聊天的回答") || bodyText.includes("免费注册")) {
@@ -103,6 +116,10 @@ export class ChatGPTProvider extends AbstractProviderAdapter {
 
   async ask(ctx: ProviderContext, prompt: string): Promise<void> {
     const session = this.getSession(ctx);
+
+    // ---- 关闭可能遮挡输入框的登录弹窗 ----
+    await this.dismissLoginModal(session.page);
+
     const input = await firstVisibleLocator(
       session.page,
       chatgptSelectors.promptInputCandidates,
@@ -113,8 +130,8 @@ export class ChatGPTProvider extends AbstractProviderAdapter {
       throw new Error("ChatGPT prompt input not found");
     }
 
-    await input.click();
-    await input.fill(prompt);
+    await input.click({ force: true }).catch(() => undefined);
+    await this.fillLongText(input, session.page, prompt);
 
     const sendButton = await firstVisibleLocator(
       session.page,
@@ -175,7 +192,42 @@ export class ChatGPTProvider extends AbstractProviderAdapter {
         stableIterations = 0;
       }
 
-      if (!isStreaming && !isTypingIndicatorVisible && stableIterations >= 1) {
+      if (!isStreaming && !isTypingIndicatorVisible && stableIterations >= 2) {
+        // ---- 完成后二次读取：等待额外 500ms 后重新获取答案 ----
+        await sleep(500);
+        const finalAnswers = session.page.locator(chatgptSelectors.answerContainerCandidates.join(", "));
+        const finalCount = await finalAnswers.count().catch(() => 0);
+        if (finalCount > 0) {
+          const finalText = normalizeAnswerText(
+            await finalAnswers.nth(finalCount - 1).innerText().catch(() => "")
+          );
+          if (finalText && finalText !== previousText) {
+            // 内容仍在变化，继续等待直到再次稳定
+            previousText = finalText;
+            stableIterations = 0;
+            while (Date.now() < deadline) {
+              await sleep(300);
+              const [stillTyping, stillStreaming] = await Promise.all([
+                session.page.locator("[data-testid='typing-animation'], .result-thinking, .animate-pulse").first().isVisible().catch(() => false),
+                session.page.locator("button[aria-label*='Stop'], button:has-text('Stop')").first().isVisible().catch(() => false)
+              ]);
+              const recheckAnswers = session.page.locator(chatgptSelectors.answerContainerCandidates.join(", "));
+              const recheckCount = await recheckAnswers.count().catch(() => 0);
+              const recheckText = recheckCount > 0
+                ? normalizeAnswerText(await recheckAnswers.nth(recheckCount - 1).innerText().catch(() => ""))
+                : "";
+              if (recheckText === previousText) {
+                stableIterations += 1;
+              } else {
+                previousText = recheckText;
+                stableIterations = 0;
+              }
+              if (!stillTyping && !stillStreaming && stableIterations >= 2) {
+                return;
+              }
+            }
+          }
+        }
         return;
       }
 
@@ -208,5 +260,47 @@ export class ChatGPTProvider extends AbstractProviderAdapter {
       screenshotPath: artifacts.screenshotPath,
       createdAt: nowIso()
     };
+  }
+
+  /**
+   * 尝试关闭 ChatGPT 页面上可能遮挡输入的登录弹窗
+   */
+  private async dismissLoginModal(page: import("playwright").Page): Promise<void> {
+    const modalSelectors = [
+      "#modal-no-auth-login",
+      "[data-testid='modal-no-auth-login']"
+    ];
+
+    for (const sel of modalSelectors) {
+      const visible = await page.locator(sel).first().isVisible().catch(() => false);
+      if (!visible) continue;
+
+      // 尝试关闭按钮
+      const closeSelectors = [
+        `${sel} button[aria-label*='close' i]`,
+        `${sel} button[aria-label*='关闭' i]`,
+        `${sel} button[aria-label*='dismiss' i]`,
+        `${sel} [data-testid*='close']`,
+        `${sel} button:has-text('✕')`,
+        `${sel} button:has-text('×')`,
+        `${sel} button:has-text('关闭')`
+      ];
+
+      for (const closeSel of closeSelectors) {
+        const closeBtn = page.locator(closeSel).first();
+        if (await closeBtn.isVisible().catch(() => false)) {
+          await closeBtn.click({ force: true }).catch(() => undefined);
+          await sleep(500);
+          return;
+        }
+      }
+
+      // 没有关闭按钮，尝试用 JS 移除弹窗
+      await page.evaluate((selector) => {
+        const el = document.querySelector(selector);
+        if (el) el.remove();
+      }, sel).catch(() => undefined);
+      await sleep(300);
+    }
   }
 }

@@ -14,4 +14,5 @@ export interface ProviderAdapter {
   ask(ctx: ProviderContext, prompt: string): Promise<void>;
   waitForAnswerComplete(ctx: ProviderContext): Promise<void>;
   extractAnswer(ctx: ProviderContext, prompt: string): Promise<ProviderAnswer>;
+  isAnswerIncomplete(answerText: string): boolean;
 }

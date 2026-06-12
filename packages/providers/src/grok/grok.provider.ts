@@ -81,12 +81,7 @@ export class GrokProvider extends AbstractProviderAdapter {
     await session.page.keyboard.press("Meta+A").catch(() => undefined);
     await session.page.keyboard.press("Backspace").catch(() => undefined);
 
-    try {
-      await input.fill(prompt);
-    } catch {
-      // Grok may use a rich contenteditable editor; fall back to keyboard-based input
-      await session.page.keyboard.insertText(prompt);
-    }
+    await this.fillLongText(input, session.page, prompt);
 
     await sleep(400);
 
@@ -147,6 +142,30 @@ export class GrokProvider extends AbstractProviderAdapter {
 
       if (Date.now() - lastChangeAt >= this.quietPeriodMs) {
         await sleep(this.finalDomSettleMs);
+        // ---- 完成后二次读取：等待额外 500ms 后重新获取答案 ----
+        await sleep(500);
+        const recheckText = await this.readLatestAnswerText(ctx);
+        if (recheckText && recheckText !== previousText) {
+          previousText = recheckText;
+          lastChangeAt = Date.now();
+          // 继续等待直到再次稳定
+          while (Date.now() < deadline) {
+            await sleep(200);
+            const nextText = await this.readLatestAnswerText(ctx);
+            if (nextText !== previousText) {
+              previousText = nextText;
+              lastChangeAt = Date.now();
+            }
+            if (await this.isStillGenerating(ctx)) {
+              await sleep(200);
+              continue;
+            }
+            if (Date.now() - lastChangeAt >= this.quietPeriodMs) {
+              await sleep(this.finalDomSettleMs);
+              return;
+            }
+          }
+        }
         return;
       }
 

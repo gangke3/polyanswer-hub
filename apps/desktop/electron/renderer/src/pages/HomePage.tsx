@@ -257,6 +257,30 @@ const zhCopy = {
     exportSaved: (path: string) => `任务已保存到本地文件：${path}`,
     exportFailed: (message: string) => `保存任务文本失败：${message}`
   },
+  saveAll: {
+    title: "保存全部答案",
+    txt: "保存为 TXT",
+    md: "保存为 MD",
+    pdf: "保存为 PDF",
+    saving: "保存中...",
+    saved: (path: string) => `全部答案已保存：${path}`,
+    canceled: "已取消保存。",
+    failed: (message: string) => `保存全部答案失败：${message}`
+  },
+  resummarize: {
+    button: "重新总结",
+    running: "正在重新总结...",
+    success: "重新总结完成。",
+    failed: (message: string) => `重新总结失败：${message}`,
+    noAnswers: "没有可用的已完成答案来进行总结。"
+  },
+  edit: {
+    edit: "编辑",
+    save: "保存修改",
+    cancel: "取消",
+    editing: "编辑中",
+    saved: (title: string) => `已保存 ${title} 的编辑内容。`
+  },
   testQuestion: "请只回复 OK"
 };
 
@@ -486,6 +510,30 @@ const enCopy: UiCopy = {
     exportSaved: (path: string) => `Task saved to local file: ${path}`,
     exportFailed: (message: string) => `Failed to save task text: ${message}`
   },
+  saveAll: {
+    title: "Save All Answers",
+    txt: "Save as TXT",
+    md: "Save as MD",
+    pdf: "Save as PDF",
+    saving: "Saving...",
+    saved: (path: string) => `All answers saved: ${path}`,
+    canceled: "Save canceled.",
+    failed: (message: string) => `Failed to save all answers: ${message}`
+  },
+  resummarize: {
+    button: "Re-summarize",
+    running: "Re-summarizing...",
+    success: "Re-summarization completed.",
+    failed: (message: string) => `Re-summarization failed: ${message}`,
+    noAnswers: "No completed answers available for summarization."
+  },
+  edit: {
+    edit: "Edit",
+    save: "Save edits",
+    cancel: "Cancel",
+    editing: "Editing",
+    saved: (title: string) => `Edits saved for ${title}.`
+  },
   testQuestion: "Please reply with OK only"
 };
 
@@ -605,6 +653,8 @@ export function HomePage() {
   const [historyExpandedId, setHistoryExpandedId] = useState<string | null>(null);
   const [historyActiveTabs, setHistoryActiveTabs] = useState<Record<string, string>>({});
   const [historyExportingId, setHistoryExportingId] = useState<string | null>(null);
+  const [saveAllFormat, setSaveAllFormat] = useState<"txt" | "md" | "pdf" | null>(null);
+  const [resummarizing, setResummarizing] = useState(false);
   const [loadedHistoryItemId, setLoadedHistoryItemId] = useState<string | null>(null);
   const [emailFeedback, setEmailFeedback] = useState<ProviderFeedback | null>(null);
   const [loginHint, setLoginHint] = useState(() => copy.login.preparing);
@@ -1159,6 +1209,133 @@ export function HomePage() {
     }
   }
 
+  async function handleSaveAll(format: "txt" | "md" | "pdf") {
+    if (!result) return;
+
+    setSaveAllFormat(format);
+
+    try {
+      // Build the payload from the current result
+      const payload = {
+        question: result.task.question,
+        createdAt: result.task.createdAt,
+        finishedAt: result.task.finishedAt,
+        status: result.task.status,
+        providerIds: result.task.providerIds as string[],
+        answers: result.answers.map((a) => ({
+          providerId: a.providerId as string,
+          status: a.status,
+          answerText: a.answer?.answerText,
+          errorMessage: a.errorMessage
+        })),
+        synthesis: result.synthesis ? { finalAnswer: result.synthesis.finalAnswer } : undefined,
+        autoSummary: result.autoSummary
+          ? {
+              providerId: result.autoSummary.providerId as string,
+              status: result.autoSummary.status,
+              answerText: result.autoSummary.answer?.answerText,
+              errorMessage: result.autoSummary.errorMessage
+            }
+          : undefined
+      };
+
+      let saveResult: { canceled: boolean; path?: string };
+
+      if (format === "pdf") {
+        saveResult = await window.multiAiApi.exportPdfTask(payload);
+      } else {
+        saveResult = await window.multiAiApi.saveAllAnswers({ data: payload, format });
+      }
+
+      if (saveResult.canceled) {
+        appendLog("info", copy.saveAll.canceled);
+      } else {
+        appendLog("success", copy.saveAll.saved(saveResult.path ?? ""));
+      }
+    } catch (error) {
+      appendLog("error", copy.saveAll.failed(error instanceof Error ? error.message : String(error)));
+    } finally {
+      setSaveAllFormat(null);
+    }
+  }
+
+  async function handleResummarize() {
+    if (!result || resummarizing) return;
+
+    const completedAnswers = result.answers.filter(
+      (a) => a.status === "completed" && a.answer?.answerText
+    );
+    if (completedAnswers.length === 0) {
+      appendLog("error", copy.resummarize.noAnswers);
+      return;
+    }
+
+    setResummarizing(true);
+    appendLog("info", copy.resummarize.running);
+
+    try {
+      const summaryResult = await window.multiAiApi.resummarize({
+        question: result.task.question,
+        answers: result.answers.map((a) => ({
+          providerId: a.providerId as string,
+          status: a.status,
+          answerText: a.answer?.answerText,
+          errorMessage: a.errorMessage
+        })),
+        summaryProviderId: summaryProviderId
+      });
+
+      setResult((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          autoSummary: summaryResult
+        };
+      });
+
+      setActiveResultTab("summary");
+
+      if (summaryResult.status === "completed") {
+        appendLog("success", copy.resummarize.success);
+      } else {
+        appendLog("error", copy.resummarize.failed(summaryResult.errorMessage ?? "Unknown error"));
+      }
+    } catch (error) {
+      appendLog("error", copy.resummarize.failed(error instanceof Error ? error.message : String(error)));
+    } finally {
+      setResummarizing(false);
+    }
+  }
+
+  function handleAnswerEdit(providerId: string, newBody: string) {
+    setResult((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        answers: prev.answers.map((a) => {
+          if (a.providerId !== providerId) return a;
+          return {
+            ...a,
+            answer: a.answer
+              ? { ...a.answer, answerText: newBody }
+              : {
+                  id: `edited-${Date.now()}`,
+                  taskProviderId: `tp-${providerId}`,
+                  providerId: a.providerId as ProviderId,
+                  question: prev.task.question,
+                  answerText: newBody,
+                  createdAt: new Date().toISOString()
+                },
+            status: "completed" as const
+          };
+        })
+      };
+    });
+
+    const label = PROVIDER_LABELS[providerId as ProviderId] ?? providerId;
+    appendLog("success", copy.edit.saved(label));
+  }
+
   const selectedProviderCount = selectedProviderIds.length;
   const trimmedQuestion = question.trim();
   const submitDisabled = running || selectedProviderCount === 0 || !loginReady || !trimmedQuestion;
@@ -1693,6 +1870,33 @@ export function HomePage() {
               title={copy.result.taskStatus(statusLabel(result.task.status, copy))}
               description={resultSummary || copy.result.fallbackSummary(result.answers.length, completedCount, failedCount)}
             />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
+              <span className="eyebrow" style={{ margin: 0, marginRight: '8px' }}>{copy.saveAll.title}</span>
+              <button
+                className="secondary-button"
+                style={{ fontSize: '12px', padding: '4px 10px', minHeight: 'auto' }}
+                disabled={saveAllFormat !== null}
+                onClick={() => void handleSaveAll('txt')}
+              >
+                {saveAllFormat === 'txt' ? copy.saveAll.saving : copy.saveAll.txt}
+              </button>
+              <button
+                className="secondary-button"
+                style={{ fontSize: '12px', padding: '4px 10px', minHeight: 'auto' }}
+                disabled={saveAllFormat !== null}
+                onClick={() => void handleSaveAll('md')}
+              >
+                {saveAllFormat === 'md' ? copy.saveAll.saving : copy.saveAll.md}
+              </button>
+              <button
+                className="secondary-button"
+                style={{ fontSize: '12px', padding: '4px 10px', minHeight: 'auto' }}
+                disabled={saveAllFormat !== null}
+                onClick={() => void handleSaveAll('pdf')}
+              >
+                {saveAllFormat === 'pdf' ? copy.saveAll.saving : copy.saveAll.pdf}
+              </button>
+            </div>
             {verificationRequiredProviders.length > 0 ? (
               <section className="panel warning-panel">
                 <p className="eyebrow">{copy.result.manualVerification}</p>
@@ -1730,12 +1934,36 @@ export function HomePage() {
                     const summary = getPreferredSummary(result, copy);
 
                     if (!result.autoSummary && result.synthesis) {
-                      return result.synthesis ? <SynthesisPanel synthesis={result.synthesis} label={copy.summary.answerTitle} /> : null;
+                      return result.synthesis ? (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                            <button
+                              className="secondary-button"
+                              style={{ fontSize: '12px', padding: '5px 14px', minHeight: 'auto', fontWeight: 600 }}
+                              disabled={resummarizing}
+                              onClick={() => void handleResummarize()}
+                            >
+                              {resummarizing ? copy.resummarize.running : copy.resummarize.button}
+                            </button>
+                          </div>
+                          <SynthesisPanel synthesis={result.synthesis} label={copy.summary.answerTitle} />
+                        </div>
+                      ) : null;
                     }
 
                     if (summary) {
                       return (
                         <div className="auto-summary-result">
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                            <button
+                              className="secondary-button"
+                              style={{ fontSize: '12px', padding: '5px 14px', minHeight: 'auto', fontWeight: 600 }}
+                              disabled={resummarizing}
+                              onClick={() => void handleResummarize()}
+                            >
+                              {resummarizing ? copy.resummarize.running : copy.resummarize.button}
+                            </button>
+                          </div>
                           <AnswerCard
                             title={summary.title}
                             status={summary.status}
@@ -1771,6 +1999,7 @@ export function HomePage() {
                         status={answer.status}
                         statusText={statusLabel(answer.status, copy)}
                         body={formatAnswerBody(answer, copy)}
+                        onEdit={(newBody) => handleAnswerEdit(answer.providerId as string, newBody)}
                       />
                     );
                   })

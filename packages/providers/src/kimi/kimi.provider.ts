@@ -67,8 +67,45 @@ export class KimiProvider extends AbstractProviderAdapter {
         lastChangeAt = Date.now();
       }
 
+      // 文本已稳定但内容不充实（可能是搜索/思考前置语），继续等待
+      if (
+        Date.now() - lastChangeAt >= this.quietPeriodMs &&
+        this.isToolOnlyText(latestText)
+      ) {
+        // 只在剩余时间充足时才继续等待更充实的答案
+        if (Date.now() < deadline - 8000) {
+          await sleep(500);
+          continue;
+        }
+        // 时间不多了，接受当前文本
+      }
+
       if (Date.now() - lastChangeAt >= this.quietPeriodMs) {
         await sleep(this.finalDomSettleMs);
+        // ---- 完成后二次读取：等待额外 500ms 后重新获取答案 ----
+        await sleep(500);
+        const recheckText = await this.readLatestAnswerText(ctx);
+        if (recheckText && recheckText !== previousText) {
+          previousText = recheckText;
+          lastChangeAt = Date.now();
+          // 继续等待直到再次稳定
+          while (Date.now() < deadline) {
+            await sleep(200);
+            const nextText = await this.readLatestAnswerText(ctx);
+            if (nextText !== previousText) {
+              previousText = nextText;
+              lastChangeAt = Date.now();
+            }
+            if (await this.isStillGenerating(ctx)) {
+              await sleep(200);
+              continue;
+            }
+            if (Date.now() - lastChangeAt >= this.quietPeriodMs) {
+              await sleep(this.finalDomSettleMs);
+              return;
+            }
+          }
+        }
         return;
       }
 
@@ -102,6 +139,9 @@ export class KimiProvider extends AbstractProviderAdapter {
   private async readLatestAnswerText(ctx: ProviderContext): Promise<string> {
     const session = this.getSession(ctx);
 
+    // 第一轮：从首选选择器中收集所有非空文本
+    const foundTexts: string[] = [];
+
     for (const selector of this.preferredAnswerSelectors) {
       const locator = session.page.locator(selector);
       const count = await locator.count().catch(() => 0);
@@ -110,16 +150,28 @@ export class KimiProvider extends AbstractProviderAdapter {
       }
 
       for (let index = count - 1; index >= Math.max(0, count - 4); index -= 1) {
-        const text = normalizeAnswerText(
-          await locator.nth(index).innerText().catch(() => "")
-        );
-
-        if (text && !this.isToolOnlyText(text)) {
-          return text;
+        const rawText = await locator.nth(index).innerText().catch(() => "");
+        if (rawText && rawText.trim()) {
+          foundTexts.push(rawText.trim());
         }
       }
     }
 
+    // 第二：尝试返回非工具文本的答案
+    for (const text of foundTexts) {
+      if (!this.isToolOnlyText(text)) {
+        return normalizeAnswerText(text);
+      }
+    }
+
+    // 第三：如果所有文本都被识别为工具文本，回退到最长的文本（优于空答案）
+    if (foundTexts.length > 0) {
+      const longest = foundTexts.reduce((a, b) => (b.length > a.length ? b : a), foundTexts[0]);
+      console.log(`[Kimi] ⚠ 所有答案文本被判定为工具文本，回退至最长文本 (length=${longest.length})`);
+      return normalizeAnswerText(longest);
+    }
+
+    // 第四：宽泛回退——从候选选择器中查找
     const candidates = await session.page
       .locator(kimiSelectors.answerContainerCandidates.join(", "))
       .evaluateAll((elements) =>
@@ -131,7 +183,18 @@ export class KimiProvider extends AbstractProviderAdapter {
       .catch(() => []);
 
     const latest = [...candidates].reverse().find((text) => !this.isToolOnlyText(text));
-    return normalizeAnswerText(latest ?? "");
+    if (latest) {
+      return normalizeAnswerText(latest);
+    }
+
+    // 最终回退：返回候选列表中最长的文本
+    if (candidates.length > 0) {
+      const longest = candidates.reduce((a, b) => (b.length > a.length ? b : a), candidates[0]);
+      console.log(`[Kimi] ⚠ 候选文本均被判定为工具文本，回退至最长候选 (length=${longest.length})`);
+      return normalizeAnswerText(longest);
+    }
+
+    return "";
   }
 
   private async isStillGenerating(ctx: ProviderContext): Promise<boolean> {
@@ -172,9 +235,32 @@ export class KimiProvider extends AbstractProviderAdapter {
       "搜索网页",
       "结果",
       "篇资料",
-      "个网页"
+      "个网页",
+      "让我搜索",
+      "让我先搜索",
+      "我来搜索",
+      "我来为您搜索",
+      "让我查一下",
+      "让我来查"
     ];
 
-    return normalized.length < 200 && toolOnlyMarkers.some((marker) => normalized.includes(marker));
+    // Kimi 的搜索/思考前置语通常很短，且以"搜索""查""解决方案"等词结尾
+    if (normalized.length < 120 && toolOnlyMarkers.some((marker) => normalized.includes(marker))) {
+      return true;
+    }
+
+    // 如果文本很短且以引导性语句开头（没有实质内容），视为工具过渡文本
+    if (normalized.length < 150) {
+      const introPatterns = [
+        /^我来为您.*方案/i,
+        /^让我.*搜索.*趋势/i,
+        /^我来.*分析.*解决/i
+      ];
+      if (introPatterns.some((pattern) => pattern.test(normalized))) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }

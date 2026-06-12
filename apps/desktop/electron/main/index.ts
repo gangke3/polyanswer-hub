@@ -4,13 +4,15 @@ import fsPromises from "node:fs/promises";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { createTask } from "./ipc/task.ipc.js";
+import { resummarize } from "./ipc/resummarize.js";
 import { BRAND } from "../common/brand.js";
 import { clearHistory, deleteHistoryItem, getHistoryItemById, listHistory } from "./ipc/history.ipc.js";
 import { listProviderMetadata, openProviderLoginPages } from "./ipc/provider.ipc.js";
 import { loadAppSettings, saveAppSettings, updateProviderSettings } from "./ipc/settings.ipc.js";
 import { securityPolicies } from "./security/policies.js";
 import { createMainWindowOptions } from "./windows.js";
-import { createSuggestedTaskFileName, formatHistoryItemText } from "./services/task-output.js";
+import { createSuggestedTaskFileName, formatHistoryItemText, formatTaskResultText, formatTaskResultMarkdown, formatHistoryItemMarkdown } from "./services/task-output.js";
+import { saveTaskAsPdf, saveContentAsPdf } from "./services/pdf.service.js";
 import { startDesktopApiServer } from "./services/api-server.js";
 
 const require = createRequire(import.meta.url);
@@ -173,7 +175,125 @@ function registerIpc(): void {
     await fsPromises.writeFile(saveResult.filePath, formatHistoryItemText(item), "utf8");
     return { canceled: false, path: saveResult.filePath };
   });
+
+  // Save all answers (TXT or MD) via native dialog
+  ipcMain.handle("task:save-all", async (event, payload: {
+    data: {
+      question: string;
+      createdAt: string;
+      finishedAt?: string;
+      status: string;
+      providerIds: string[];
+      answers: Array<{ providerId: string; status: string; answerText?: string; errorMessage?: string }>;
+      synthesis?: { finalAnswer: string };
+      autoSummary?: { providerId: string; status: string; answerText?: string; errorMessage?: string };
+    };
+    format: "txt" | "md";
+  }) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const ext = payload.format === "md" ? "md" : "txt";
+    const filterName = payload.format === "md" ? "Markdown Files" : "Text Files";
+    const defaultPath = path.join(
+      app.getPath("documents"),
+      createSuggestedTaskFileName(payload.data.question, undefined, ext)
+    );
+
+    const saveResult = ownerWindow
+      ? await dialog.showSaveDialog(ownerWindow, {
+          defaultPath,
+          filters: [{ name: filterName, extensions: [ext] }]
+        })
+      : await dialog.showSaveDialog({
+          defaultPath,
+          filters: [{ name: filterName, extensions: [ext] }]
+        });
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return { canceled: true };
+    }
+
+    // 前端传来的 answers 是平铺结构（answerText 在顶层），
+    // 而 formatTaskResultMarkdown/formatTaskResultText 内部的 formatAnswerBody
+    // 期望 ProviderRunResult 嵌套结构（answer.answerText）。
+    // 在此处统一转换，避免答案内容丢失。
+    const normalizedAnswers = payload.data.answers.map((a) => ({
+      providerId: a.providerId,
+      status: a.status,
+      answer: a.answerText ? { answerText: a.answerText } : undefined,
+      errorMessage: a.errorMessage
+    }));
+
+    const normalizedAutoSummary = payload.data.autoSummary
+      ? {
+          providerId: payload.data.autoSummary.providerId,
+          status: payload.data.autoSummary.status,
+          answer: payload.data.autoSummary.answerText
+            ? { answerText: payload.data.autoSummary.answerText }
+            : undefined,
+          errorMessage: payload.data.autoSummary.errorMessage
+        }
+      : undefined;
+
+    const text =
+      payload.format === "md"
+        ? formatTaskResultMarkdown({
+            task: { question: payload.data.question, createdAt: payload.data.createdAt, finishedAt: payload.data.finishedAt, status: payload.data.status, providerIds: payload.data.providerIds as any } as any,
+            answers: normalizedAnswers as any,
+            synthesis: payload.data.synthesis as any,
+            autoSummary: normalizedAutoSummary as any
+          })
+        : formatTaskResultText({
+            task: { question: payload.data.question, createdAt: payload.data.createdAt, finishedAt: payload.data.finishedAt, status: payload.data.status, providerIds: payload.data.providerIds } as any,
+            answers: normalizedAnswers as any,
+            synthesis: payload.data.synthesis as any,
+            autoSummary: normalizedAutoSummary as any
+          });
+
+    await fsPromises.writeFile(saveResult.filePath, text, "utf8");
+    return { canceled: false, path: saveResult.filePath };
+  });
+
+  // Export task as real PDF
+  ipcMain.handle("export:pdf-task", async (event, payload: {
+    question: string;
+    createdAt: string;
+    finishedAt?: string;
+    status: string;
+    providerIds: string[];
+    answers: Array<{ providerId: string; status: string; answerText?: string; errorMessage?: string }>;
+    synthesis?: { finalAnswer: string };
+    autoSummary?: { providerId: string; status: string; answerText?: string; errorMessage?: string };
+  }) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const defaultFileName = createSuggestedTaskFileName(payload.question, undefined, "pdf");
+    return saveTaskAsPdf(
+      {
+        question: payload.question,
+        createdAt: payload.createdAt,
+        finishedAt: payload.finishedAt,
+        status: payload.status,
+        providerIds: payload.providerIds,
+        answers: payload.answers,
+        synthesis: payload.synthesis,
+        autoSummary: payload.autoSummary
+      },
+      defaultFileName,
+      ownerWindow
+    );
+  });
+
+  // Export single content block as PDF
+  ipcMain.handle("export:pdf-content", async (event, payload: { title: string; body: string }) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const safeName = payload.title
+      .replace(/[<>:"/\\|?*]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40) || "answer";
+    return saveContentAsPdf(payload.title, payload.body, `${safeName}.pdf`, ownerWindow);
+  });
   ipcMain.handle("task:create", (_event, input) => createTask(input));
+  ipcMain.handle("task:resummarize", (_event, input) => resummarize(input));
 }
 
 let apiServer: Awaited<ReturnType<typeof startDesktopApiServer>> | undefined;

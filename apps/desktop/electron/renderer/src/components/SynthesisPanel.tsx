@@ -6,7 +6,7 @@ interface SynthesisPanelProps {
 }
 
 export function SynthesisPanel(props: SynthesisPanelProps) {
-  const handleSave = (format: 'txt' | 'md' | 'pdf') => {
+  const handleSave = async (format: 'txt' | 'md' | 'pdf') => {
     const text = props.synthesis.finalAnswer;
     
     if (format === 'txt' || format === 'md') {
@@ -20,26 +20,10 @@ export function SynthesisPanel(props: SynthesisPanelProps) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } else if (format === 'pdf') {
-      const printWindow = window.open('', '', 'width=800,height=600');
-      if (printWindow) {
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>Answer</title>
-              <style>
-                body { font-family: sans-serif; padding: 20px; white-space: pre-wrap; line-height: 1.6; }
-              </style>
-            </head>
-            <body></body>
-          </html>
-        `);
-        printWindow.document.body.textContent = text;
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-        }, 250);
+      try {
+        await window.multiAiApi.exportPdfContent({ title: props.label ?? "综合答案", body: text });
+      } catch (err) {
+        console.error("PDF export failed:", err);
       }
     }
   };
